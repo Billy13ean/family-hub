@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Emails the summary every day at 7:00. Install steps are in the README. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ai-lab.home-manager</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/nick/ai-lab/home-manager</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>python</string>
+        <string>-m</string>
+        <string>home_manager</string>
+        <string>summary</string>
+        <string>--send</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/nick/Library/Logs/home-manager.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/nick/Library/Logs/home-manager.log</string>
+</dict>
+</plist>

@@ -1,0 +1,21 @@
+# Copy to ~/.config/home-manager/config.toml and fill in.
+# This example is committed; the real file lives outside the repo.
+
+# IANA time zone used for "today" and for displayed times.
+timezone = "America/New_York"
+
+# One entry per calendar, in the order they should appear in the summary.
+# "primary" is the calendar of the Google account you authorize with.
+# A calendar someone shared with you uses their email address as its id
+# (run `uv run python -m home_manager calendars` to list the ids you can read).
+[[calendars]]
+label = "Nick"
+id = "primary"
+
+[[calendars]]
+label = "Wife"
+id = "her.address@gmail.com"
+
+[email]
+# Who receives the morning summary. It is sent from the authorized account.
+to = ["you@gmail.com"]
