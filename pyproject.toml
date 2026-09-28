@@ -1,12 +1,11 @@
 [project]
 name = "home-manager"
-version = "0.1.0"
-description = "Morning summary of two Google Calendars, with conflicts"
+version = "0.2.0"
+description = "Household helper: Apple Calendar and Reminders for the family hub, with a morning digest"
 requires-python = ">=3.12"
 dependencies = [
-    "google-api-python-client>=2.100",
-    "google-auth>=2.30",
-    "google-auth-oauthlib>=1.2",
+    # EventKit bindings for Apple Calendar and Reminders. macOS only; tests use a fake.
+    "pyobjc-framework-EventKit>=11; sys_platform == 'darwin'",
 ]
 
 [dependency-groups]

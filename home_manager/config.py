@@ -1,10 +1,16 @@
-"""Loads settings and locates secrets. Everything here lives outside the repo."""
+"""Loads settings from ~/.config/home-manager/config.toml, which lives outside the repo.
+
+The file is optional: without it, home-manager uses the Mac's time zone, a
+calendar named "Household" and a Reminders list named "Bills", and the morning
+digest has nobody to send to.
+"""
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import time
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_CONFIG_DIR = "~/.config/home-manager"
 
@@ -21,26 +27,26 @@ class Paths:
     def config(self) -> Path:
         return self.dir / "config.toml"
 
-    @property
-    def client_secret(self) -> Path:
-        return self.dir / "client_secret.json"
-
-    @property
-    def token(self) -> Path:
-        return self.dir / "token.json"
-
-
-@dataclass(frozen=True)
-class CalendarSource:
-    label: str
-    id: str
-
 
 @dataclass(frozen=True)
 class Config:
-    calendars: list[CalendarSource]
     timezone: ZoneInfo
-    email_to: list[str]
+    # The only calendar home-manager changes.
+    household_calendar: str = "Household"
+    # Calendars to read, by name. Empty means every calendar except
+    # subscribed ones (holidays, sports schedules) and Birthdays.
+    calendars: tuple[str, ...] = ()
+    # Friendlier names in summaries, for example {"Home": "Nick"}.
+    labels: dict[str, str] = field(default_factory=dict)
+    # Reminders list holding bills; they show up in the digest a few days early.
+    bill_list: str = "Bills"
+    bill_days: int = 3
+    # Who gets the morning digest by iMessage, and when.
+    digest_to: tuple[str, ...] = ()
+    digest_time: time = time(7, 0)
+
+    def label(self, calendar_name: str) -> str:
+        return self.labels.get(calendar_name, calendar_name)
 
 
 def get_paths() -> Paths:
@@ -48,23 +54,50 @@ def get_paths() -> Paths:
     return Paths(Path(configured).expanduser())
 
 
+def system_timezone() -> ZoneInfo:
+    """The Mac's own time zone, read from the /etc/localtime link."""
+    try:
+        target = os.path.realpath("/etc/localtime")
+        if "zoneinfo/" in target:
+            return ZoneInfo(target.split("zoneinfo/", 1)[1])
+    except (OSError, ValueError, ZoneInfoNotFoundError):
+        pass
+    return ZoneInfo("UTC")
+
+
+def _clock(text: str, key: str) -> time:
+    try:
+        hours, minutes = (int(part) for part in text.split(":"))
+        return time(hours, minutes)
+    except ValueError:
+        raise ConfigError(f"{key} must look like \"07:00\", not {text!r}.") from None
+
+
 def load_config(paths: Paths) -> Config:
-    if not paths.config.exists():
-        raise ConfigError(
-            f"No config at {paths.config}. Copy config.example.toml there and edit it."
-        )
-    with paths.config.open("rb") as f:
-        raw = tomllib.load(f)
+    raw: dict = {}
+    if paths.config.exists():
+        with paths.config.open("rb") as f:
+            try:
+                raw = tomllib.load(f)
+            except tomllib.TOMLDecodeError as e:
+                raise ConfigError(f"{paths.config} isn't valid TOML: {e}") from None
 
-    calendars = [CalendarSource(c["label"], c["id"]) for c in raw.get("calendars", [])]
-    if not calendars:
-        raise ConfigError(f"{paths.config} has no [[calendars]] entries.")
-    labels = [c.label for c in calendars]
-    if len(set(labels)) != len(labels):
-        raise ConfigError("Calendar labels must be unique.")
+    try:
+        tz = ZoneInfo(raw["timezone"]) if "timezone" in raw else system_timezone()
+    except ZoneInfoNotFoundError:
+        raise ConfigError(f"Unknown timezone {raw['timezone']!r} in {paths.config}.") from None
 
+    household = raw.get("household", {})
+    calendars = raw.get("calendars", {})
+    bills = raw.get("bills", {})
+    digest = raw.get("digest", {})
     return Config(
-        calendars=calendars,
-        timezone=ZoneInfo(raw.get("timezone", "UTC")),
-        email_to=list(raw.get("email", {}).get("to", [])),
+        timezone=tz,
+        household_calendar=household.get("calendar", "Household"),
+        calendars=tuple(calendars.get("read", [])),
+        labels=dict(calendars.get("labels", {})),
+        bill_list=bills.get("list", "Bills"),
+        bill_days=int(bills.get("remind_days", 3)),
+        digest_to=tuple(digest.get("to", [])),
+        digest_time=_clock(digest.get("time", "07:00"), "[digest] time"),
     )

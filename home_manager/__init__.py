@@ -1,1 +1,1 @@
-"""Home manager: morning calendar summary (v1)."""
+"""Home manager: Apple Calendar and Reminders for the family hub, with a morning digest."""

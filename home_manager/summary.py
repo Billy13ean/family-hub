@@ -22,8 +22,8 @@ class Conflict:
 def merge_shared(events: list[Event], labels: list[str]) -> list[Event]:
     """Collapse the same event appearing on several calendars into one.
 
-    Matched by iCalUID plus start time, since every instance of a recurring
-    event shares one iCalUID.
+    Matched by uid plus start time, since every instance of a repeating event
+    shares one uid.
     """
     merged: dict[tuple[str, datetime], Event] = {}
     for event in events:
@@ -56,8 +56,9 @@ def format_summary(
     events: list[Event],
     conflicts: list[Conflict],
     warnings: list[str],
+    reminders: list[str] | None = None,
 ) -> tuple[str, str]:
-    """Return (subject, plain-text body)."""
+    """Return (headline, plain-text body). `reminders` are extra lines shown after conflicts."""
     if conflicts:
         count = f"{len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''}"
     else:
@@ -71,36 +72,45 @@ def format_summary(
 
     if conflicts:
         lines.append("CONFLICTS")
-        for c in conflicts:
-            when = _time_range(c.start, c.end)
-            if c.double_booked:
-                who = " & ".join(c.double_booked)
-                lines.append(f"  ! {when}  {who} double-booked: {c.first.title} / {c.second.title}")
-            else:
-                lines.append(f"  ! {when}  {_describe(c.first)} overlaps {_describe(c.second)}")
+        lines += [f"  ! {conflict_line(c)}" for c in conflicts]
         lines.append("")
+
+    if reminders:
+        lines += reminders
+
+    if not events:
+        lines += ["Nothing on the calendar.", ""]
 
     sections = [(label, [e for e in events if e.owners == (label,)]) for label in labels]
     sections.append(("Together", [e for e in events if len(e.owners) > 1]))
     for heading, section_events in sections:
-        if heading == "Together" and not section_events:
-            continue
+        if not section_events and (heading == "Together" or len(labels) > 3):
+            continue  # with many calendars, empty ones are just noise
         lines.append(heading.upper())
         if not section_events:
             lines.append("  Nothing scheduled")
         for e in section_events:
             together = f"  ({' & '.join(e.owners)})" if heading == "Together" and len(e.owners) < len(labels) else ""
-            lines.append(f"  {_when(e, day):<19} {e.title}{together}")
+            lines.append(f"  {when_on(e, day):<19} {e.title}{together}")
         lines.append("")
 
     return subject, "\n".join(lines).rstrip() + "\n"
+
+
+def conflict_line(c: Conflict) -> str:
+    when = _time_range(c.start, c.end)
+    if c.double_booked:
+        who = " & ".join(c.double_booked)
+        return f"{when}  {who} double-booked: {c.first.title} / {c.second.title}"
+    return f"{when}  {_describe(c.first)} overlaps {_describe(c.second)}"
 
 
 def _describe(event: Event) -> str:
     return f"{' & '.join(event.owners)}'s {event.title}"
 
 
-def _when(event: Event, day: date) -> str:
+def when_on(event: Event, day: date) -> str:
+    """Time range of `event` as seen on `day` ("All day", "9:00 AM–10:00 AM", "Tue 6:00 PM–...")."""
     if event.all_day:
         return "All day"
     start = _clock(event.start) if event.start.date() == day else f"{event.start:%a} {_clock(event.start)}"

@@ -1,0 +1,240 @@
+# Family hub: text Claude to run the household
+
+Nick and his wife text a **Family Hub** contact in iMessage:
+
+> Add soccer Saturday 2 to 3 at Field 4
+> Put milk and eggs on the grocery list
+> What's going on this weekend?
+> Electric bill is paid
+
+A Claude Code session on the Mac mini reads each text through the official
+[iMessage channel plugin](https://github.com/anthropics/claude-plugins-official/tree/main/external_plugins/imessage).
+It updates Apple Calendar and Reminders through `./hm`, then replies in the
+same thread. Every morning the hub also texts a digest of the day: conflicts,
+events, bills due soon and anything due today.
+
+## How it fits together
+
+```
+iPhones ──iMessage──▶ Family Hub's Apple Account, signed in on a Mac of its own
+                      (a macOS VM on your desktop, or a separate macOS user)
+                            │
+                            ▼
+                      Terminal: start-hub.command
+                        ├─ Claude Code + iMessage plugin   (may only run ./hm)
+                        └─ ./hm digest-loop                (7:00 digest)
+                            │  EventKit
+                            ▼
+                      iCloud: Household calendar  ◀── shared with you both
+                              Grocery / To-Do / Bills Reminders lists
+```
+
+**Why the hub gets its own Apple Account.** The iMessage plugin reads every
+text that reaches the Mac it runs on. If it used your Apple Account, every text
+your wife sends *you* would reach Claude. With its own account, only texts sent
+to Family Hub arrive, and only the allowlisted numbers are acted on.
+
+**What it can and can't do.** `hub-settings.json`, which `start-hub.command` passes to Claude Code, runs the session in
+`dontAsk` mode. It may only run `./hm ...`, reply by iMessage, and read photo
+attachments. Everything else is denied without a prompt, which matters because
+no one is at the terminal to approve prompts. `./hm` only changes the
+Household calendar and the Reminders lists shared with the hub. Personal
+calendars shared with it are read-only.
+
+## Setup
+
+Allow about an hour. Steps 1–3 depend on where the hub runs. Everything after
+that happens **inside the hub's Mac** (the VM, or the Family Hub user).
+
+### 1. Pick where the hub runs
+
+Either way, it keeps running while you use your own account.
+
+**Option A: a macOS virtual machine (recommended).** A separate Mac in a
+window on your desktop. It can't see your files, keychain or Messages, and you
+can stop it any time to free its memory. Apple supports Messages and iCloud in
+VMs when the host runs macOS Sequoia or later.
+
+1. Install [VirtualBuddy](https://github.com/insidegui/VirtualBuddy) (free);
+   UTM also works.
+2. Create a macOS VM with **macOS 26.2 or later**. 26.1 had a bug that
+   blocked Apple sign-in in VMs. Name it "Family Hub" and give it 4 CPU cores,
+   6 GB of memory and a 64 GB disk.
+3. In the VM's Setup Assistant, create a local user named `familyhub`. You can
+   skip the Apple Account screen for now. Skip FileVault in the VM; your Mac's
+   own encryption covers the VM's disk.
+4. Inside the VM:
+   - System Settings → Users & Groups → **Automatically log in as** `familyhub`.
+   - System Settings → Energy → turn on **Prevent automatic sleeping**.
+   - Don't set up shared folders with your Mac.
+5. When you need the memory back, shut the VM down. After the Mac mini
+   restarts, open VirtualBuddy and start the VM. The hub comes back by itself
+   and answers anything sent while it was off.
+
+**Option B: a separate macOS user.** Lighter, since it shares your running
+macOS, but less isolated.
+
+1. System Settings → Users & Groups → **Add User**. Make it **Standard**, full
+   name "Family Hub", account name `familyhub`.
+2. System Settings → Control Center → **Fast User Switching** → Show in Menu Bar.
+3. Switch to Family Hub from the menu bar to set it up, then switch back. It
+   keeps running in the background.
+4. After a restart, log into Family Hub first, then your account. Automatic
+   login doesn't work with FileVault on.
+
+### 2. Create the hub's Apple Account (inside the hub's Mac)
+
+1. System Settings → **Sign in** (top of the sidebar) → **Don't have an
+   account?**
+2. Choose **Get a free iCloud email address**, for example
+   `yourfamily.hub@icloud.com`. An address that's already an Apple Account
+   won't work.
+3. Use your own birthday, and your mobile as the phone number for verification
+   codes. A phone number can be the trusted number on several Apple Accounts.
+4. If you see "your account cannot be created at this time", try again later
+   or create it at <https://account.apple.com>, then sign in here.
+
+On your phone and your wife's, save the address as a contact named
+**Family Hub**.
+
+### 3. Turn on what the hub uses (inside the hub's Mac)
+
+1. System Settings → your Family Hub name → **iCloud**. Turn on **Calendars**
+   and **Reminders**. Turn off Photos and iCloud Drive; the hub doesn't need them.
+2. Open **Messages**, check it's signed in to the hub's account, and text the
+   Family Hub contact from your phone to make sure messages arrive. If iMessage
+   won't activate on a brand-new account, wait a day and try again.
+
+### 4. Share the calendar and lists from your iPhone
+
+Keep them in **your** iCloud account and share them, so the family's data
+doesn't depend on the hub account.
+
+- **Household calendar:** in the Calendar app, tap Calendars → **Add
+  Calendar** → name it "Household" (under iCloud). Tap ⓘ next to it → **Add
+  Person**. Add your wife and the Family Hub address, with **Allow Editing** on.
+- **Reminders lists:** create **Grocery** (list type Groceries), **To-Do** and
+  **Bills**. On each, tap ⋯ → **Share List** and invite your wife and Family Hub.
+- **Personal calendars (optional):** share yours with Family Hub with Allow
+  Editing **off**, and have your wife do the same. The hub can then warn about
+  clashes. It never changes them.
+- In the hub's Mac, accept each invitation. They appear in Calendar and
+  Reminders there, or in the hub's iCloud email.
+
+The names Household and Bills are the defaults. If you use others, set them in
+the config file (step 7).
+
+### 5. Install the tools (inside the hub's Mac)
+
+In Terminal:
+
+```sh
+xcode-select --install                             # git
+curl -LsSf https://astral.sh/uv/install.sh | sh    # uv (Python)
+curl -fsSL https://bun.sh/install | bash           # Bun, for the iMessage plugin
+curl -fsSL https://claude.ai/install.sh | bash     # Claude Code
+```
+
+Close and reopen Terminal, then clone the repo. It's private, so paste a GitHub
+personal access token when git asks for a password (github.com → Settings →
+Developer settings → Fine-grained tokens, read-only access to `ai-lab`):
+
+```sh
+git clone https://github.com/Billy13ean/ai-lab.git ~/ai-lab
+```
+
+### 6. Give Terminal its permissions (inside the hub's Mac)
+
+1. System Settings → Privacy & Security → **Full Disk Access** → turn on
+   **Terminal**. The iMessage plugin needs it to read the Messages database.
+2. Then, in Terminal:
+
+   ```sh
+   cd ~/ai-lab/home-manager/hub
+   ./hm setup
+   ```
+
+   Click **Allow** on the Calendars and Reminders prompts. `setup` then lists
+   every calendar and list the hub can see, and says if anything is missing,
+   such as an invitation not accepted yet.
+
+### 7. Config and family details (inside the hub's Mac)
+
+```sh
+mkdir -p ~/.config/home-manager && chmod 700 ~/.config/home-manager
+cp ~/ai-lab/home-manager/config.example.toml ~/.config/home-manager/config.toml
+open -e ~/.config/home-manager/config.toml     # digest phone numbers, calendar names
+
+cd ~/ai-lab/home-manager/hub
+cp CLAUDE.local.example.md CLAUDE.local.md
+open -e CLAUDE.local.md                        # names, numbers, kids, usual places
+```
+
+Test the digest now. You should get a text from Family Hub. The first time,
+macOS asks whether Terminal may control Messages: click **OK**.
+
+```sh
+./hm summary            # prints it
+./hm summary --send     # texts it
+```
+
+### 8. Install the iMessage plugin and set the allowlist (inside the hub's Mac)
+
+```sh
+cd ~/ai-lab/home-manager/hub
+claude            # log in with your claude.ai account and trust this folder
+```
+
+In Claude Code, run `/plugin install imessage@claude-plugins-official`, pick
+**user** scope, then `/exit`.
+
+Now write the allowlist. Use your and your wife's handles exactly as Messages
+shows them: `+1` and the digits, or an Apple Account email.
+
+```sh
+mkdir -p ~/.claude/channels/imessage && chmod 700 ~/.claude/channels/imessage
+cat > ~/.claude/channels/imessage/access.json <<'JSON'
+{
+  "dmPolicy": "allowlist",
+  "allowFrom": ["+15551234567", "+15557654321"],
+  "groups": {},
+  "pending": {},
+  "chunkMode": "newline"
+}
+JSON
+chmod 600 ~/.claude/channels/imessage/access.json
+```
+
+The allowlist is edited by hand here, not with `/imessage:access`. The hub's
+locked-down settings block that skill on purpose, so a text message can never
+talk the session into adding someone.
+
+### 9. Start it (inside the hub's Mac)
+
+Double-click `start-hub.command` in Finder (in `~/ai-lab/home-manager/hub`)
+and leave the Terminal window open. To start it at login, add it in System
+Settings → General → **Login Items** → **+**.
+
+Text Family Hub "what's on today?" from your phone. The answer should arrive
+within a few seconds.
+
+## Day-to-day
+
+| Situation | What to do |
+|---|---|
+| Free up memory for a big job | Shut down the VM. When it's back, the hub answers anything sent while it was off (last 12 hours) |
+| Add or remove who can text it | Edit `allowFrom` in `~/.claude/channels/imessage/access.json`, then restart the hub (Ctrl-C twice in its Terminal and double-click `start-hub.command`) |
+| Change the digest time or recipients | Edit `[digest]` in `~/.config/home-manager/config.toml`. It applies from the next digest |
+| It stopped answering | Look at the hub's Terminal window. Check Messages is signed in, and that the VM or user is running |
+| Digest didn't arrive | `~/Library/Logs/family-hub-digest.log` in the hub's Mac |
+| Update the code | `cd ~/ai-lab && git pull`, then restart the hub |
+| See what it did | The hub's Terminal window shows every command it ran |
+
+## Limits worth knowing
+
+- Channels are a Claude Code **research preview**. The flag or plugin may
+  change. It runs on your Claude subscription and counts toward its usage.
+- Texts are only caught up for the last 12 hours after the hub restarts.
+- AppleScript can't do tapbacks or threaded replies. You get plain replies.
+- Reminders' own "assign to" feature isn't available to the hub, so it writes
+  the person's name into the title instead.

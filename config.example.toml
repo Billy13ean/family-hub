@@ -1,21 +1,30 @@
 # Copy to ~/.config/home-manager/config.toml and fill in.
-# This example is committed; the real file lives outside the repo.
+# This example is committed; the real file lives outside the repo because it
+# holds phone numbers. Every setting is optional.
 
-# IANA time zone used for "today" and for displayed times.
+# IANA time zone for "today" and displayed times. Defaults to the Mac's own.
 timezone = "America/New_York"
 
-# One entry per calendar, in the order they should appear in the summary.
-# "primary" is the calendar of the Google account you authorize with.
-# A calendar someone shared with you uses their email address as its id
-# (run `uv run python -m home_manager calendars` to list the ids you can read).
-[[calendars]]
-label = "Nick"
-id = "primary"
+[household]
+# The shared iCloud calendar the hub adds to and changes. It's the only one it changes.
+calendar = "Household"
 
-[[calendars]]
-label = "Wife"
-id = "her.address@gmail.com"
+[calendars]
+# Calendars to read for summaries and clash checks, by name as Calendar shows
+# them. Leave out to read every calendar except subscribed ones and Birthdays.
+# read = ["Household", "Nick", "Sarah"]
 
-[email]
-# Who receives the morning summary. It is sent from the authorized account.
-to = ["you@gmail.com"]
+[calendars.labels]
+# Friendlier names in summaries: "calendar name" = "label".
+# "Home" = "Nick"
+
+[bills]
+# Reminders list with bills, and how many days ahead the digest lists them.
+list = "Bills"
+remind_days = 3
+
+[digest]
+# Who gets the morning digest by iMessage (phone numbers with +country code,
+# or Apple Account emails), and when.
+to = ["+15551234567", "+15557654321"]
+time = "07:00"
