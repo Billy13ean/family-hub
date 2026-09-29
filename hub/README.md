@@ -82,17 +82,21 @@ macOS, but less isolated.
 4. After a restart, log into Family Hub first, then your account. Automatic
    login doesn't work with FileVault on.
 
-### 2. Create the hub's Apple Account (inside the hub's Mac)
+### 2. Create the hub's Apple Account (on the web, not in the VM)
 
-1. System Settings → **Sign in** (top of the sidebar) → **Don't have an
-   account?**
-2. Choose **Get a free iCloud email address**, for example
-   `yourfamily.hub@icloud.com`. An address that's already an Apple Account
+Apple doesn't allow creating an Apple Account inside a virtual machine. Create
+it in a browser on your own Mac or phone, then sign in to it in the VM.
+
+1. Make an email address for it first, for example a new Gmail such as
+   `yourfamily.hub@gmail.com`. An address that's already an Apple Account
    won't work.
-3. Use your own birthday, and your mobile as the phone number for verification
-   codes. A phone number can be the trusted number on several Apple Accounts.
-4. If you see "your account cannot be created at this time", try again later
-   or create it at <https://account.apple.com>, then sign in here.
+2. Go to <https://account.apple.com> → **Create Your Apple Account**. Enter the
+   email, a password, your own birthday, and your mobile as the phone number.
+   A phone number can be the trusted number on several Apple Accounts.
+3. Enter the codes sent to the email and the phone.
+4. If you see "your account cannot be created at this time", try again later.
+5. In the hub's Mac: System Settings → **Sign in** (top of the sidebar) with
+   the new account.
 
 On your phone and your wife's, save the address as a contact named
 **Family Hub**.
