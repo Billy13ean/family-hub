@@ -82,21 +82,22 @@ macOS, but less isolated.
 4. After a restart, log into Family Hub first, then your account. Automatic
    login doesn't work with FileVault on.
 
-### 2. Create the hub's Apple Account (on the web, not in the VM)
+### 2. Create the hub's Apple Account (on real Mac hardware, not in the VM)
 
-Apple doesn't allow creating an Apple Account inside a virtual machine. Create
-it in a browser on your own Mac or phone, then sign in to it in the VM.
+Apple doesn't allow creating an Apple Account inside a VM, and it's quick to
+block new accounts that show up in several places at once (website, App Store,
+VM). What worked: one attempt, from a temporary macOS user on the Mac mini.
 
-1. Make an email address for it first, for example a new Gmail such as
-   `yourfamily.hub@gmail.com`. An address that's already an Apple Account
-   won't work.
-2. Go to <https://account.apple.com> → **Create Your Apple Account**. Enter the
-   email, a password, your own birthday, and your mobile as the phone number.
-   A phone number can be the trusted number on several Apple Accounts.
-3. Enter the codes sent to the email and the phone.
-4. If you see "your account cannot be created at this time", try again later.
-5. In the hub's Mac: System Settings → **Sign in** (top of the sidebar) with
-   the new account.
+1. On the Mac mini: System Settings → Users & Groups → **Add User** (Standard,
+   for example "Hub Setup"). Log into it.
+2. System Settings → **Sign in** → **Don't have an account?** Name it
+   "Family Hub", use your own birthday, choose **Get a free iCloud email
+   address**, and use a family mobile number for the verification code.
+3. Don't retry if it refuses: wait a day. Repeated attempts extend Apple's block.
+4. In the VM: System Settings → **Sign in** with the new account.
+5. Once the VM works, sign the temporary user out of iMessage (Messages →
+   Settings → iMessage → Sign Out), so hub texts only land in the VM. You can
+   keep the user as a backup or delete it.
 
 On your phone and your wife's, save the address as a contact named
 **Family Hub**.
