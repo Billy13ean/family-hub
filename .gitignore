@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Personal details stay out of git: the hub's family notes live next to CLAUDE.md,
+# and settings live in ~/.config/home-manager/.
+CLAUDE.local.md
+config.toml
+.env
+.env.*

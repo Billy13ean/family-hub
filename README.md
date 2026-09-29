@@ -92,4 +92,4 @@ uv run pytest tests/test_cli.py::test_grocery_list    # one test
 - `tests/fake_apple.py`: an in-memory stand-in for `apple.py`, used by the tests
 
 The first version (morning email from two Google Calendars through the Google
-APIs) is in git history at commit `c837dd0`.
+APIs) is the repo's first commit.

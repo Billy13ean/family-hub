@@ -142,10 +142,11 @@ curl -fsSL https://claude.ai/install.sh | bash     # Claude Code
 
 Close and reopen Terminal, then clone the repo. It's private, so paste a GitHub
 personal access token when git asks for a password (github.com → Settings →
-Developer settings → Fine-grained tokens, read-only access to `ai-lab`):
+Developer settings → Fine-grained tokens, read-only access to `family-hub`).
+Once the repo is public, no token is needed:
 
 ```sh
-git clone https://github.com/Billy13ean/ai-lab.git ~/ai-lab
+git clone https://github.com/Billy13ean/family-hub.git ~/family-hub
 ```
 
 ### 6. Give Terminal its permissions (inside the hub's Mac)
@@ -155,7 +156,7 @@ git clone https://github.com/Billy13ean/ai-lab.git ~/ai-lab
 2. Then, in Terminal:
 
    ```sh
-   cd ~/ai-lab/home-manager/hub
+   cd ~/family-hub/hub
    ./hm setup
    ```
 
@@ -167,10 +168,10 @@ git clone https://github.com/Billy13ean/ai-lab.git ~/ai-lab
 
 ```sh
 mkdir -p ~/.config/home-manager && chmod 700 ~/.config/home-manager
-cp ~/ai-lab/home-manager/config.example.toml ~/.config/home-manager/config.toml
+cp ~/family-hub/config.example.toml ~/.config/home-manager/config.toml
 open -e ~/.config/home-manager/config.toml     # digest phone numbers, calendar names
 
-cd ~/ai-lab/home-manager/hub
+cd ~/family-hub/hub
 cp CLAUDE.local.example.md CLAUDE.local.md
 open -e CLAUDE.local.md                        # names, numbers, kids, usual places
 ```
@@ -186,7 +187,7 @@ macOS asks whether Terminal may control Messages: click **OK**.
 ### 8. Install the iMessage plugin and set the allowlist (inside the hub's Mac)
 
 ```sh
-cd ~/ai-lab/home-manager/hub
+cd ~/family-hub/hub
 claude            # log in with your claude.ai account and trust this folder
 ```
 
@@ -216,7 +217,7 @@ talk the session into adding someone.
 
 ### 9. Start it (inside the hub's Mac)
 
-Double-click `start-hub.command` in Finder (in `~/ai-lab/home-manager/hub`)
+Double-click `start-hub.command` in Finder (in `~/family-hub/hub`)
 and leave the Terminal window open. To start it at login, add it in System
 Settings → General → **Login Items** → **+**.
 
@@ -232,7 +233,7 @@ within a few seconds.
 | Change the digest time or recipients | Edit `[digest]` in `~/.config/home-manager/config.toml`. It applies from the next digest |
 | It stopped answering | Look at the hub's Terminal window. Check Messages is signed in, and that the VM or user is running |
 | Digest didn't arrive | `~/Library/Logs/family-hub-digest.log` in the hub's Mac |
-| Update the code | `cd ~/ai-lab && git pull`, then restart the hub |
+| Update the code | `cd ~/family-hub && git pull`, then restart the hub |
 | See what it did | The hub's Terminal window shows every command it ran |
 
 ## Limits worth knowing

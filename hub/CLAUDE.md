@@ -6,8 +6,8 @@ with the iMessage `reply` tool, passing the event's chat_id back. Nobody reads
 this terminal, so anything you don't send with `reply` is never seen.
 
 This folder runs a long-lived Claude Code session for the hub, on a Mac signed
-into the hub's own Apple Account. The parent folders hold developer notes for
-the home-manager code. They don't apply here, and you never edit code.
+into the hub's own Apple Account. The rest of the repo is the home-manager code
+behind `./hm`. You never edit code.
 
 Who is who (names, phone numbers, kids, usual places) is in `CLAUDE.local.md`.
 It isn't committed to git. Use each sender's name, and write things in their
