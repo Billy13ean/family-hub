@@ -34,6 +34,10 @@ class AppleError(Exception):
     pass
 
 
+def _name_key(name: str) -> str:
+    return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+
 @dataclass(frozen=True)
 class CalendarInfo:
     name: str
@@ -141,7 +145,9 @@ class AppleStore:
 
     @staticmethod
     def _pick(cals: list, name: str, what: str):
-        matches = [c for c in cals if c.title().casefold() == name.casefold()]
+        # Ignore case, spaces and punctuation, so "To-Do", "To Do" and "todo" all match.
+        key = _name_key(name)
+        matches = [c for c in cals if _name_key(c.title()) == key]
         if not matches:
             names = ", ".join(sorted({c.title() for c in cals})) or "none"
             raise AppleError(f"No {what} named {name!r}. This account has: {names}.")

@@ -22,7 +22,8 @@ Everything is in Apple's own apps, so it shows up on everyone's iPhone.
   you spot clashes.
 - **Reminders lists**, shared with the family:
   - Grocery (and any other shopping lists).
-  - To-Do for household jobs. Put the person in the title: "Call plumber (Nick)".
+  - To-Do (it may be spelled "To Do") for household jobs. List names ignore case,
+    spaces and dashes, so `./hm list show todo` works too. Put the person in the title: "Call plumber (Nick)".
   - Bills, each with its due date and a monthly or yearly repeat. Put the
     amount and "autopay" in the notes.
 
