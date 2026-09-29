@@ -24,8 +24,9 @@ trap 'exit 0' INT TERM
 while true; do
   # The first prompt makes Claude answer any texts sent while the hub was off.
   # hub-settings.json locks the session down: it may only run ./hm and reply.
-  claude --settings hub-settings.json --channels plugin:imessage@claude-plugins-official \
-    "Run the startup check described in CLAUDE.md."
+  # The prompt goes before --channels, which takes every argument after it as a channel.
+  claude "Run the startup check described in CLAUDE.md." \
+    --settings hub-settings.json --channels plugin:imessage@claude-plugins-official
   echo "Claude exited at $(date). Restarting in 10 seconds (Ctrl-C to stop)..."
   sleep 10
 done
