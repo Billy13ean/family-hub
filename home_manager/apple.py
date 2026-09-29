@@ -58,6 +58,9 @@ class AppleStore:
         self.EK, self.F = _frameworks()
         self.tz = tz
         self.store = self.EK.EKEventStore.alloc().init()
+        # macOS can keep reporting "not determined" for the rest of the process
+        # after access is granted, so remember grants made in this run.
+        self._granted: set[int] = set()
 
     # --- Access -----------------------------------------------------------------
 
@@ -70,6 +73,7 @@ class AppleStore:
 
     def _request(self, entity: int) -> bool:
         if self.EK.EKEventStore.authorizationStatusForEntityType_(entity) == _FULL_ACCESS:
+            self._granted.add(entity)
             return True
         done, result = threading.Event(), []
 
@@ -83,9 +87,13 @@ class AppleStore:
             self.store.requestFullAccessToRemindersWithCompletion_(handler)
         self._wait(done, 300, "the access prompt")
         self.store = self.EK.EKEventStore.alloc().init()  # a fresh store sees the new permission
+        if result[0]:
+            self._granted.add(entity)
         return result[0]
 
     def _require(self, entity: int) -> None:
+        if entity in self._granted:
+            return
         if self.EK.EKEventStore.authorizationStatusForEntityType_(entity) != _FULL_ACCESS:
             what = "Calendars" if entity == _ENTITY_EVENT else "Reminders"
             raise AppleError(
