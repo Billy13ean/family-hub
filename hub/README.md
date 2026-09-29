@@ -238,6 +238,8 @@ within a few seconds.
 
 - Channels are a Claude Code **research preview**. The flag or plugin may
   change. It runs on your Claude subscription and counts toward its usage.
+- Claude restarts every night at 3 AM (`RESTART_HOUR` in `start-hub.command`) so the
+  conversation starts fresh and each text uses less of your plan's limits.
 - Texts are only caught up for the last 12 hours after the hub restarts.
 - AppleScript can't do tapbacks or threaded replies. You get plain replies.
 - Reminders' own "assign to" feature isn't available to the hub, so it writes
