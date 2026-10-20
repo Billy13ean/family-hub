@@ -27,6 +27,10 @@ class Paths:
     def config(self) -> Path:
         return self.dir / "config.toml"
 
+    @property
+    def pending(self) -> Path:
+        return self.dir / "pending.json"
+
 
 @dataclass(frozen=True)
 class Config:

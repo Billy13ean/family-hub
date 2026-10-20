@@ -10,7 +10,9 @@ import time as systime
 from datetime import date, datetime, time, timedelta
 
 from . import household as hh
+from . import jobs
 from . import messages
+from . import pending as pq
 from . import reminders as rm
 from .apple import AppleError, AppleStore
 from .config import Config, ConfigError, get_paths, load_config
@@ -180,10 +182,8 @@ def cmd_cal_list(args) -> None:
 def cmd_cal_find(args) -> None:
     config = _config()
     query = " ".join(args.query).casefold()
-    now = datetime.now(config.timezone)
-    events = backend(config).events(
-        now - timedelta(days=args.past), now + timedelta(days=args.days), (config.household_calendar,), config.labels
-    )
+    start, end = _bounds(_today(config) - timedelta(days=args.past), args.past + args.days + 1, config)
+    events = backend(config).events(start, end, (config.household_calendar,), config.labels)
     found = [e for e in sorted(events, key=lambda e: e.start) if query in e.title.casefold()]
     if not found:
         print(f"No {config.household_calendar} events matching {query!r} from {args.past} days ago to {args.days} days ahead.")
@@ -381,6 +381,60 @@ def cmd_list_due(args) -> None:
         print(f"{r.list}: {rm.describe(r, today)}")
 
 
+# --- Jobs and the pending queue -----------------------------------------------
+
+
+def _queue() -> pq.Queue:
+    return pq.Queue(get_paths().pending)
+
+
+def cmd_jobs_scan(args) -> None:
+    config = _config()
+    queue = _queue()
+    added, seen = [], 0
+    for path in args.files:
+        try:
+            raw = open(path, "rb").read()
+        except OSError as e:
+            raise jobs.JobAlertError(f"Can't read {path}: {e.strerror}.") from None
+        for job in jobs.parse_alert(raw):
+            data = {"link": job.link, "alert": job.alert, "company": job.company}
+            item = queue.add("job", job.key, job.line(), data, _today(config))
+            if item:
+                added.append(item)
+            else:
+                seen += 1
+    queue.save()
+    print(f"{len(added)} new job{'s' if len(added) != 1 else ''} ({seen} seen before).")
+    for item in added:
+        print(f"#{item.number} {item.title}\n   {item.data['link']}")
+
+
+def cmd_pending_list(args) -> None:
+    items = _queue().waiting(args.kind)
+    if not items:
+        print("Nothing waiting.")
+    for item in items:
+        link = f"\n   {item.data['link']}" if "link" in item.data else ""
+        print(f"#{item.number} [{item.kind}] {item.title}{link}")
+
+
+def _decide(args, status: str) -> None:
+    queue = _queue()
+    done = [queue.decide(n, status) for n in args.numbers]
+    queue.save()
+    for item in done:
+        print(f"{status.capitalize()}: #{item.number} {item.title}")
+
+
+def cmd_pending_accept(args) -> None:
+    _decide(args, pq.ACCEPTED)
+
+
+def cmd_pending_reject(args) -> None:
+    _decide(args, pq.REJECTED)
+
+
 # --- Argument parsing ---------------------------------------------------------
 
 
@@ -495,6 +549,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--days", type=int, default=7)
     p.set_defaults(func=cmd_list_due)
 
+    # Jobs and proposals waiting for a yes or no
+    job_cmds = commands.add_parser("jobs", help="LinkedIn job alerts").add_subparsers(required=True, metavar="action")
+    p = job_cmds.add_parser("scan", help="queue the jobs in LinkedIn alert emails (.eml files)")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(func=cmd_jobs_scan)
+
+    queue = commands.add_parser("pending", help="proposals waiting for a yes or no").add_subparsers(required=True, metavar="action")
+    p = queue.add_parser("list")
+    p.add_argument("--kind", help="only this kind, for example job")
+    p.set_defaults(func=cmd_pending_list)
+    for name, func in (("accept", cmd_pending_accept), ("reject", cmd_pending_reject)):
+        p = queue.add_parser(name)
+        p.add_argument("numbers", nargs="+", type=int)
+        p.set_defaults(func=func)
+
     return parser
 
 
@@ -502,7 +571,7 @@ def main() -> None:
     args = build_parser().parse_args()
     try:
         args.func(args)
-    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError) as e:
+    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError, jobs.JobAlertError, pq.PendingError) as e:
         sys.exit(f"error: {e}")
 
 

@@ -1,0 +1,77 @@
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+To: Test Person <test@example.com>
+Subject: Trail Crew Lead  at Example Parks
+Date: Mon, 19 Oct 2026 20:45:15 +0000
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@maild.linkedin.com header.s=d2048-202308-0d header.b=AAAAAAAA;
+       dkim=pass header.i=@linkedin.com header.s=d2048-202308-00 header.b=BBBBBBBB;
+       spf=pass smtp.mailfrom=bounce.linkedin.com;
+       dmarc=pass header.from=linkedin.com
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+Your job alert for park ranger in North America
+New jobs match your preferences.
+Manage alerts: https://www.linkedin.com/comm/jobs/alerts?midToken=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+Trail Crew Lead
+Example Parks
+United States
+Fast growing
+View job: https://www.linkedin.com/comm/jobs/view/1000000001/?trackingId=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+---------------------------------------------------------
+
+
+Visitor Center Supervisor, Seasonal
+Sample Outdoors Co
+United States
+
+This company is actively hiring
+View job: https://www.linkedin.com/comm/jobs/view/1000000002/?trackingId=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+---------------------------------------------------------
+
+
+Wildlife Survey Technician
+Placeholder Conservancy
+Bend, OR
+Top applicant
+View job: https://www.linkedin.com/comm/jobs/view/1000000003/?trackingId=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+---------------------------------------------------------
+
+See all jobs https://www.linkedin.com/jobs/search-results/?otpToken=FAKE-SIGN-IN-TOKEN
+Edit alert https://www.linkedin.com/jobs/jam/manage/1234567?otpToken=FAKE-SIGN-IN-TOKEN
+New jobs from your other alerts
+<strong class="font-bold" style="font-weight: 600;">pastry chef</strong> jobs in Chicago
+
+Pastry Chef, Morning Shift
+Demo Bakery
+Chicago, IL
+$55K-$62K / year
+1 school alum
+Apply with resume & profile
+View job: https://www.linkedin.com/comm/jobs/view/1000000004/?trackingId=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+---------------------------------------------------------
+
+
+Trail Crew Lead
+Example Parks
+United States
+View job: https://www.linkedin.com/comm/jobs/view/1000000001/?trackingId=FAKE&otpToken=FAKE-SIGN-IN-TOKEN
+
+---------------------------------------------------------
+
+See all jobs https://www.linkedin.com/jobs/search-results/?otpToken=FAKE-SIGN-IN-TOKEN
+Edit alert https://www.linkedin.com/jobs/jam/manage/7654321?otpToken=FAKE-SIGN-IN-TOKEN
+----------------------------------------
+This email was intended for Test Person (Example Title @ Example Co)
+Learn why we included this: https://www.linkedin.com/help/linkedin/answer/4788?otpToken=FAKE-SIGN-IN-TOKEN
+You are receiving Job Alert emails.
+Manage your job alerts:  https://www.linkedin.com/comm/jobs/alerts?otpToken=FAKE-SIGN-IN-TOKEN
+Unsubscribe: https://www.linkedin.com/job-alert-email-batch-unsubscribe?otpToken=FAKE-SIGN-IN-TOKEN    ·  Help: https://www.linkedin.com/help/linkedin/answer/67?otpToken=FAKE-SIGN-IN-TOKEN
+© 2026 LinkedIn Corporation, 1000 West Maude Avenue, Sunnyvale, CA 94085.
+LinkedIn and the LinkedIn logo are registered trademarks of LinkedIn.

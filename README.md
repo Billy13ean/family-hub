@@ -177,6 +177,18 @@ hm list edit To-Do plumber --due 2026-10-02 [--no-due] [--repeat weekly] [--titl
 hm list due [--days 7]                # anything due soon, on every list
 ```
 
+Job alerts and the queue of proposals waiting for a yes or no:
+
+```sh
+hm jobs scan alert.eml [more.eml]     # queue the jobs in LinkedIn alert emails (must pass LinkedIn's DKIM check)
+hm pending list [--kind job]
+hm pending accept 3 | pending reject 2 4
+```
+
+Alert links carry a one-time LinkedIn sign-in token, so only the job ID is
+kept and links are rebuilt without it. The queue is
+`~/.config/home-manager/pending.json`; a job is never proposed twice.
+
 Every command has `--help`. List items can be named by title, a unique piece of
 the title, or the `#id` that `list show` prints.
 
