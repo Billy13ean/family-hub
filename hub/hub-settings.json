@@ -11,6 +11,8 @@
       "Bash(./hm summary --send*)",
       "Bash(./hm digest-loop*)",
       "Bash(./hm jobs find*)",
+      "Bash(./hm jobs fetch*)",
+      "Bash(./hm jobs loop*)",
       "Read(~/.config/**)",
       "Read(~/.claude/**)",
       "Read(~/Library/Messages/chat.db*)",

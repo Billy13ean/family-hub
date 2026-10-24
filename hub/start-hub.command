@@ -1,8 +1,9 @@
 #!/bin/zsh
 # Starts the family hub: a Claude Code session that answers iMessages, plus the
-# morning digest. Run it on the hub's Mac user, in Terminal. Terminal holds the
-# permissions the hub needs (Full Disk Access, Calendars, Reminders, and control
-# of Messages), and everything started from here inherits them.
+# morning digest and the hourly job-alert check. Run it on the hub's Mac user,
+# in Terminal. Terminal holds the permissions the hub needs (Full Disk Access,
+# Calendars, Reminders, and control of Messages), and everything started from
+# here inherits them.
 # Add this file to System Settings > General > Login Items so it starts at login.
 # If Claude exits, it restarts after 10 seconds. Press Ctrl-C twice to stop.
 # Claude is also restarted every night at 3 AM, so a long-running conversation
@@ -20,7 +21,11 @@ export IMESSAGE_ACCESS_MODE=static
 # Morning digest, in the background. Its log is in ~/Library/Logs.
 ./hm digest-loop >> "$HOME/Library/Logs/family-hub-digest.log" 2>&1 &
 DIGEST_PID=$!
-trap 'kill $DIGEST_PID $RESTART_PID 2>/dev/null' EXIT
+# Job alerts: every hour, read new ones from the hub's Gmail and look them up.
+# Needs ~/.config/home-manager/gmail.toml; without it the log says so each hour.
+./hm jobs loop >> "$HOME/Library/Logs/family-hub-jobs.log" 2>&1 &
+JOBS_PID=$!
+trap 'kill $DIGEST_PID $JOBS_PID $RESTART_PID 2>/dev/null' EXIT
 trap 'exit 0' INT TERM
 
 CHANNEL=plugin:imessage@claude-plugins-official

@@ -46,7 +46,9 @@ flowchart LR
         msgs["Messages"] --> plugin["Claude Code<br/>iMessage channel plugin"]
         plugin -- "may only run" --> hm["./hm<br/>(this repo)"]
         loop["./hm digest-loop<br/>7:00 digest"]
+        jobsloop["./hm jobs loop<br/>hourly job alerts"]
     end
+    gmail["Hub's Gmail<br/>(LinkedIn alerts only)"] -- IMAP --> jobsloop
     hm -- EventKit --> icloud["iCloud<br/>Household calendar<br/>Grocery · To-Do · Bills"]
     loop -- EventKit --> icloud
     loop -- AppleScript --> msgs
@@ -181,7 +183,9 @@ Job alerts and the queue of proposals waiting for a yes or no:
 
 ```sh
 hm jobs scan alert.eml [more.eml]     # queue the jobs in LinkedIn alert emails (must pass LinkedIn's DKIM check)
+hm jobs fetch                         # queue the unread LinkedIn alerts in the hub's Gmail (IMAP)
 hm jobs find [3 4]                    # look up waiting jobs on the company's own site and score the fit
+hm jobs loop                          # fetch, then find, every hour (start-hub.command runs it)
 hm pending list [--kind job]
 hm pending accept 3 | pending reject 2 4
 ```
@@ -189,6 +193,15 @@ hm pending accept 3 | pending reject 2 4
 Alert links carry a one-time LinkedIn sign-in token, so only the job ID is
 kept and links are rebuilt without it. The queue is
 `~/.config/home-manager/pending.json`; a job is never proposed twice.
+
+`jobs fetch` reads the hub's own Gmail account, which only receives what a
+filter on Nick's Gmail forwards: alerts from `jobalerts-noreply@linkedin.com`.
+It logs in with a Google app password from `~/.config/home-manager/gmail.toml`
+(copy `gmail.example.toml`; it must be `chmod 600`), searches for unread mail
+from that sender, and passes it to the same parser as `jobs scan`. Emails are
+marked read only after the queue is saved, and ones that fail LinkedIn's
+signature check are marked read and reported, not queued. No AI reads the
+mailbox. The hub's own session isn't allowed to run `fetch`, `find` or `loop`.
 
 `jobs find` runs `claude -p` twice per job (about 30 seconds), each in an empty
 folder with no settings, MCP servers or saved session:
@@ -206,7 +219,7 @@ folder with no settings, MCP servers or saved session:
    reason.
 
 So no single run has untrusted web text, private data and a way to act at
-once. The hub's own session isn't allowed to run `jobs find`.
+once.
 
 Every command has `--help`. List items can be named by title, a unique piece of
 the title, or the `#id` that `list show` prints.
@@ -226,7 +239,7 @@ uv run pytest tests/test_cli.py::test_grocery_list    # one test
 - `home_manager/summary.py`: merges shared events, finds conflicts, formats the digest
 - `home_manager/messages.py`: sends iMessages and looks up family chat ids
 - `home_manager/config.py`: the optional config file
-- `home_manager/jobs.py`, `pending.py`, `finder.py`: LinkedIn alert parsing, the proposals queue, and the two locked-down `claude -p` runs that look jobs up and score them
+- `home_manager/jobs.py`, `mailbox.py`, `pending.py`, `finder.py`: LinkedIn alert parsing, reading the hub's Gmail over IMAP, the proposals queue, and the two locked-down `claude -p` runs that look jobs up and score them
 - `hub/`: the iMessage family hub (`hub-settings.json` locks the Claude session down; `start-hub.command` starts it; `README.md` is the setup guide)
 - `tests/fake_apple.py`: an in-memory stand-in for `apple.py`, used by the tests
 

@@ -22,7 +22,8 @@ iPhones ──iMessage──▶ Family Hub's Apple Account, signed in on a Mac o
                             ▼
                       Terminal: start-hub.command
                         ├─ Claude Code + iMessage plugin   (may only run ./hm)
-                        └─ ./hm digest-loop                (7:00 digest)
+                        ├─ ./hm digest-loop                (7:00 digest)
+                        └─ ./hm jobs loop                  (hourly: hub's Gmail → job queue)
                             │  EventKit
                             ▼
                       iCloud: Household calendar  ◀── shared with you both
@@ -174,6 +175,17 @@ open -e ~/.config/home-manager/config.toml     # digest phone numbers, calendar 
 cd ~/family-hub/hub
 cp CLAUDE.local.example.md CLAUDE.local.md
 open -e CLAUDE.local.md                        # names, numbers, kids, usual places
+```
+
+Optional, for job alerts: the hub's Gmail login and the job profile. Both
+stay in `~/.config/home-manager/`, which the hub's Claude session can't read.
+
+```sh
+cp ~/family-hub/gmail.example.toml ~/.config/home-manager/gmail.toml
+chmod 600 ~/.config/home-manager/gmail.toml
+nano ~/.config/home-manager/gmail.toml         # hub's Gmail address and app password
+# copy job-profile.md from the Mac where you wrote it into ~/.config/home-manager/
+./hm jobs fetch                                # should log in and report what it found
 ```
 
 Test the digest now. You should get a text from Family Hub. The first time,

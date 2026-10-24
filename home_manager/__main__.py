@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 from . import finder
 from . import household as hh
 from . import jobs
+from . import mailbox
 from . import messages
 from . import pending as pq
 from . import reminders as rm
@@ -389,26 +390,63 @@ def _queue() -> pq.Queue:
     return pq.Queue(get_paths().pending)
 
 
+def _queue_jobs(queue: pq.Queue, found: list[jobs.Job], today: date) -> tuple[list[pq.Item], int]:
+    """The newly queued items, and how many jobs were queued before."""
+    added, seen = [], 0
+    for job in found:
+        data = {"link": job.link, "alert": job.alert, "role": job.title, "company": job.company, "location": job.location}
+        item = queue.add("job", job.key, job.line(), data, today)
+        if item:
+            added.append(item)
+        else:
+            seen += 1
+    return added, seen
+
+
+def _print_added(added: list[pq.Item], seen: int, source: str = "") -> None:
+    print(f"{len(added)} new job{'s' if len(added) != 1 else ''}{source} ({seen} seen before).")
+    for item in added:
+        print(f"#{item.number} {item.title}\n   {item.data['link']}")
+
+
 def cmd_jobs_scan(args) -> None:
     config = _config()
     queue = _queue()
-    added, seen = [], 0
+    found = []
     for path in args.files:
         try:
             raw = open(path, "rb").read()
         except OSError as e:
             raise jobs.JobAlertError(f"Can't read {path}: {e.strerror}.") from None
-        for job in jobs.parse_alert(raw):
-            data = {"link": job.link, "alert": job.alert, "role": job.title, "company": job.company, "location": job.location}
-            item = queue.add("job", job.key, job.line(), data, _today(config))
-            if item:
-                added.append(item)
-            else:
-                seen += 1
+        found += jobs.parse_alert(raw)
+    added, seen = _queue_jobs(queue, found, _today(config))
     queue.save()
-    print(f"{len(added)} new job{'s' if len(added) != 1 else ''} ({seen} seen before).")
-    for item in added:
-        print(f"#{item.number} {item.title}\n   {item.data['link']}")
+    _print_added(added, seen)
+
+
+def inbox(login: mailbox.Login) -> mailbox.Inbox:
+    """The hub's Gmail inbox. Tests replace this with a fake."""
+    return mailbox.Inbox(login)
+
+
+def cmd_jobs_fetch(args) -> None:
+    config = _config()
+    login = mailbox.load_login(get_paths().gmail)
+    queue = _queue()
+    with inbox(login) as box:
+        emails = box.unread_alerts()
+        found, skipped = [], []
+        for _, raw in emails:
+            try:
+                found += jobs.parse_alert(raw)
+            except jobs.JobAlertError as e:
+                skipped.append(str(e))  # marked read too, so it isn't retried every hour
+        added, seen = _queue_jobs(queue, found, _today(config))
+        queue.save()  # only then mark them read: a crash before this leaves them for next time
+        box.mark_read([uid for uid, _ in emails])
+    _print_added(added, seen, f" from {len(emails)} email{'s' if len(emails) != 1 else ''}")
+    for reason in skipped:
+        print(f"Skipped an email: {reason}")
 
 
 def _job_details(item: pq.Item) -> str:
@@ -460,6 +498,24 @@ def cmd_jobs_find(args) -> None:
         print(f"#{item.number} {item.title}\n   {item.data['link']}{_job_details(item)}")
     if todo and not profile:
         print(f"No fit scores: {paths.job_profile} doesn't exist yet.")
+
+
+def cmd_jobs_loop(args) -> None:
+    """Fetch new alerts and look them up every hour. start-hub.command runs this in the background."""
+    while True:
+        config = _config()
+        for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find)):
+            print(f"{datetime.now(config.timezone):%Y-%m-%d %H:%M} jobs {name}", flush=True)
+            try:
+                step(argparse.Namespace(numbers=[]))
+            except Exception as e:  # keep the loop alive; the next hour may work
+                print(f"jobs {name} failed: {e}", flush=True)
+                break  # nothing new to look up if the fetch failed
+            sys.stdout.flush()
+        # Short sleeps, checked against the clock, survive the Mac sleeping in between.
+        target = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
+        while datetime.now(config.timezone) < target:
+            systime.sleep(min(60, max(1, (target - datetime.now(config.timezone)).total_seconds())))
 
 
 def cmd_pending_list(args) -> None:
@@ -609,6 +665,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("find", help="look up queued jobs on the company's own site and score the fit (runs claude, slow)")
     p.add_argument("numbers", nargs="*", type=int, help="these jobs again (default: every waiting job not looked up yet)")
     p.set_defaults(func=cmd_jobs_find)
+    p = job_cmds.add_parser("fetch", help="queue the unread LinkedIn alerts in the hub's Gmail (login in gmail.toml)")
+    p.set_defaults(func=cmd_jobs_fetch)
+    p = job_cmds.add_parser("loop", help="fetch, then find, every hour (start-hub.command runs it)")
+    p.add_argument("--minutes", type=int, default=60, help="minutes between runs (default 60)")
+    p.set_defaults(func=cmd_jobs_loop)
 
     queue = commands.add_parser("pending", help="proposals waiting for a yes or no").add_subparsers(required=True, metavar="action")
     p = queue.add_parser("list")
@@ -626,7 +687,7 @@ def main() -> None:
     args = build_parser().parse_args()
     try:
         args.func(args)
-    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError, jobs.JobAlertError, finder.FinderError, pq.PendingError) as e:
+    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError, jobs.JobAlertError, finder.FinderError, mailbox.MailboxError, pq.PendingError) as e:
         sys.exit(f"error: {e}")
 
 

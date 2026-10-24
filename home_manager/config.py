@@ -35,6 +35,10 @@ class Paths:
     def job_profile(self) -> Path:
         return self.dir / "job-profile.md"
 
+    @property
+    def gmail(self) -> Path:
+        return self.dir / "gmail.toml"
+
 
 @dataclass(frozen=True)
 class Config:
