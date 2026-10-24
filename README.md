@@ -181,6 +181,7 @@ Job alerts and the queue of proposals waiting for a yes or no:
 
 ```sh
 hm jobs scan alert.eml [more.eml]     # queue the jobs in LinkedIn alert emails (must pass LinkedIn's DKIM check)
+hm jobs find [3 4]                    # look up waiting jobs on the company's own site and score the fit
 hm pending list [--kind job]
 hm pending accept 3 | pending reject 2 4
 ```
@@ -188,6 +189,24 @@ hm pending accept 3 | pending reject 2 4
 Alert links carry a one-time LinkedIn sign-in token, so only the job ID is
 kept and links are rebuilt without it. The queue is
 `~/.config/home-manager/pending.json`; a job is never proposed twice.
+
+`jobs find` runs `claude -p` twice per job (about 30 seconds), each in an empty
+folder with no settings, MCP servers or saved session:
+
+1. **Find**, with only WebSearch and WebFetch (`hub/finder-settings.json`). It
+   gets the title, company and location, and nothing private. It returns the
+   posting's link, pay, remote or on-site, a short description and a
+   suspicious flag. The code keeps the link only if it's https on the
+   company's own domain or a known job-application site (Greenhouse, Lever,
+   Workday and others); otherwise it drops everything from that page and keeps
+   the LinkedIn link. All text is cut short and stripped of links.
+2. **Score**, with no tools. It gets `~/.config/home-manager/job-profile.md`
+   (roles, pay floor, location, deal-breakers; skipped if the file doesn't
+   exist) and the checked posting, and answers with a fit from 1 to 10 and a
+   reason.
+
+So no single run has untrusted web text, private data and a way to act at
+once. The hub's own session isn't allowed to run `jobs find`.
 
 Every command has `--help`. List items can be named by title, a unique piece of
 the title, or the `#id` that `list show` prints.
@@ -207,6 +226,7 @@ uv run pytest tests/test_cli.py::test_grocery_list    # one test
 - `home_manager/summary.py`: merges shared events, finds conflicts, formats the digest
 - `home_manager/messages.py`: sends iMessages and looks up family chat ids
 - `home_manager/config.py`: the optional config file
+- `home_manager/jobs.py`, `pending.py`, `finder.py`: LinkedIn alert parsing, the proposals queue, and the two locked-down `claude -p` runs that look jobs up and score them
 - `hub/`: the iMessage family hub (`hub-settings.json` locks the Claude session down; `start-hub.command` starts it; `README.md` is the setup guide)
 - `tests/fake_apple.py`: an in-memory stand-in for `apple.py`, used by the tests
 

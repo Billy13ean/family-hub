@@ -9,6 +9,7 @@ import sys
 import time as systime
 from datetime import date, datetime, time, timedelta
 
+from . import finder
 from . import household as hh
 from . import jobs
 from . import messages
@@ -398,7 +399,7 @@ def cmd_jobs_scan(args) -> None:
         except OSError as e:
             raise jobs.JobAlertError(f"Can't read {path}: {e.strerror}.") from None
         for job in jobs.parse_alert(raw):
-            data = {"link": job.link, "alert": job.alert, "company": job.company}
+            data = {"link": job.link, "alert": job.alert, "role": job.title, "company": job.company, "location": job.location}
             item = queue.add("job", job.key, job.line(), data, _today(config))
             if item:
                 added.append(item)
@@ -410,13 +411,64 @@ def cmd_jobs_scan(args) -> None:
         print(f"#{item.number} {item.title}\n   {item.data['link']}")
 
 
+def _job_details(item: pq.Item) -> str:
+    """What the finder added, indented under the job's line; "" before it has run."""
+    posting, fit = item.data.get("posting"), item.data.get("fit")
+    if not posting:
+        return ""
+    facts = [posting["remote"].capitalize() if posting["remote"] != "unknown" else "", posting["pay"]]
+    if fit:
+        facts.append(f"fit {fit['score']}/10: {fit['reason']}")
+    lines = [" · ".join(f for f in facts if f), posting["description"]]
+    if posting["suspicious"]:
+        lines.append(f"Looks suspicious: {posting['suspicious_reason'] or 'no reason given'}")
+    if posting["note"]:
+        lines.append(f"({posting['note']}, so this is the LinkedIn link)")
+    return "".join(f"\n   {line}" for line in lines if line)
+
+
+def cmd_jobs_find(args) -> None:
+    queue = _queue()
+    paths = get_paths()
+    profile = paths.job_profile.read_text() if paths.job_profile.exists() else ""
+    if args.numbers:
+        todo = [next((i for i in queue.waiting("job") if i.number == n), None) for n in args.numbers]
+        missing = [n for n, item in zip(args.numbers, todo) if item is None]
+        if missing:
+            raise pq.PendingError(f"No waiting job numbered {', '.join(f'#{n}' for n in missing)}.")
+    else:
+        todo = [i for i in queue.waiting("job") if "posting" not in i.data]
+    if not todo:
+        print("No jobs left to look up.")
+    for item in todo:
+        title, company, location = (item.data.get(k, "") for k in ("role", "company", "location"))
+        if not title:  # queued before role and location were kept
+            title, company, location, *_ = item.title.split(" · ") + ["", "", ""]
+        try:
+            posting = finder.find(title, company, location)
+            fit = finder.score(profile, item.title, posting) if profile else None
+        except finder.FinderError as e:
+            print(f"#{item.number} {item.title}\n   Couldn't look it up: {e}")
+            continue
+        item.data["posting"] = posting.as_dict()
+        item.data.pop("fit", None)
+        if fit:
+            item.data["fit"] = {"score": fit[0], "reason": fit[1]}
+        if posting.url:
+            item.data["link"] = posting.url
+        queue.save()  # each lookup takes a while; keep what's done
+        print(f"#{item.number} {item.title}\n   {item.data['link']}{_job_details(item)}")
+    if todo and not profile:
+        print(f"No fit scores: {paths.job_profile} doesn't exist yet.")
+
+
 def cmd_pending_list(args) -> None:
     items = _queue().waiting(args.kind)
     if not items:
         print("Nothing waiting.")
     for item in items:
         link = f"\n   {item.data['link']}" if "link" in item.data else ""
-        print(f"#{item.number} [{item.kind}] {item.title}{link}")
+        print(f"#{item.number} [{item.kind}] {item.title}{link}{_job_details(item)}")
 
 
 def _decide(args, status: str) -> None:
@@ -554,6 +606,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("scan", help="queue the jobs in LinkedIn alert emails (.eml files)")
     p.add_argument("files", nargs="+")
     p.set_defaults(func=cmd_jobs_scan)
+    p = job_cmds.add_parser("find", help="look up queued jobs on the company's own site and score the fit (runs claude, slow)")
+    p.add_argument("numbers", nargs="*", type=int, help="these jobs again (default: every waiting job not looked up yet)")
+    p.set_defaults(func=cmd_jobs_find)
 
     queue = commands.add_parser("pending", help="proposals waiting for a yes or no").add_subparsers(required=True, metavar="action")
     p = queue.add_parser("list")
@@ -571,7 +626,7 @@ def main() -> None:
     args = build_parser().parse_args()
     try:
         args.func(args)
-    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError, jobs.JobAlertError, pq.PendingError) as e:
+    except (AppleError, ConfigError, hh.InputError, rm.ReminderError, messages.MessagesError, jobs.JobAlertError, finder.FinderError, pq.PendingError) as e:
         sys.exit(f"error: {e}")
 
 

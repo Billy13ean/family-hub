@@ -31,6 +31,10 @@ class Paths:
     def pending(self) -> Path:
         return self.dir / "pending.json"
 
+    @property
+    def job_profile(self) -> Path:
+        return self.dir / "job-profile.md"
+
 
 @dataclass(frozen=True)
 class Config:

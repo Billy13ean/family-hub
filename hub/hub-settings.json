@@ -10,6 +10,7 @@
     "deny": [
       "Bash(./hm summary --send*)",
       "Bash(./hm digest-loop*)",
+      "Bash(./hm jobs find*)",
       "Read(~/.config/**)",
       "Read(~/.claude/**)",
       "Read(~/Library/Messages/chat.db*)",
