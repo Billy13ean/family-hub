@@ -458,6 +458,8 @@ def _job_details(item: pq.Item) -> str:
     if fit:
         facts.append(f"fit {fit['score']}/10: {fit['reason']}")
     lines = [" · ".join(f for f in facts if f), posting["description"]]
+    if posting.get("closed"):  # older entries don't have it
+        lines.append("The posting looks closed or removed.")
     if posting["suspicious"]:
         lines.append(f"Looks suspicious: {posting['suspicious_reason'] or 'no reason given'}")
     if posting["note"]:

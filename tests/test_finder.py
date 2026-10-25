@@ -16,6 +16,7 @@ FOUND = {
     "pay": "$48K-$52K / year",
     "remote": "on-site",
     "description": "Leads a trail crew. Apply at https://evil.example/now for more.",
+    "closed": False,
     "suspicious": False,
     "suspicious_reason": "",
 }
@@ -30,6 +31,7 @@ FOUND = {
         ("https://jobs.demo.com/1", "Demo Bakery"),
         ("https://boards.greenhouse.io/exampleparks/jobs/1", "Example Parks"),
         ("https://exampleparks.wd5.myworkdayjobs.com/en-US/careers/job/1", "Example Parks"),
+        ("https://exampleprod.jobs.hr.cloud.sap/job/1", "Example Parks"),
     ],
 )
 def test_company_sites_and_job_sites_pass(url, company):
@@ -44,6 +46,7 @@ def test_company_sites_and_job_sites_pass(url, company):
         ("https://exampleparks.com.evil.example/1", "doesn't look like"),
         ("https://www.linkedin.com/jobs/view/1/", "doesn't look like"),
         ("https://notgreenhouse.io/exampleparks", "doesn't look like"),
+        ("https://hr.cloud.sap.evil.example/1", "doesn't look like"),
         ("https://user@exampleparks.com/1", "plain web address"),
         ("https://exampleparks.com:8443/1", "plain web address"),
         ("https://203.0.113.9/jobs", "plain web address"),
@@ -67,13 +70,15 @@ def test_check_posting_cleans_and_caps_text():
 def test_a_bad_link_drops_everything_from_that_page():
     posting = finder.check_posting({**FOUND, "url": "https://exampleparks-hiring.example/1"}, "Example Parks")
     assert posting.url == "" and posting.pay == "" and posting.description == ""
-    assert posting.suspicious and "link dropped" in posting.note
+    assert not posting.suspicious and "couldn't verify the link" in posting.note
 
 
 def test_not_found_and_junk_answers_fall_back():
     assert finder.check_posting({**FOUND, "found": False}, "Example Parks").note == "posting not found"
     junk = finder.check_posting({"found": "yes", "url": 5, "remote": "moon", "suspicious": "no"}, "Example Parks")
-    assert junk.url == "" and junk.remote == "unknown" and junk.suspicious is False
+    assert junk.url == "" and junk.remote == "unknown" and junk.suspicious is False and junk.closed is False
+    closed = finder.check_posting({**FOUND, "closed": True}, "Example Parks")
+    assert closed.closed and closed.url == FOUND["url"]
 
 
 def test_score_is_clamped_and_must_be_a_number(monkeypatch):
