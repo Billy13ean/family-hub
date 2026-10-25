@@ -28,3 +28,16 @@ remind_days = 3
 # or Apple Account emails), and when.
 to = ["+15551234567", "+15557654321"]
 time = "07:00"
+
+[jobs]
+# Job matches from `hm jobs loop`, texted to one person only (never the group
+# chat): the one job hunting. Leave out to keep matches in the queue untexted.
+# to = "+15551234567"
+# Text jobs that score at least this (1-10). The rest go in the weekly check.
+min_fit = 7
+# No job texts between these times; overnight matches go out after quiet_end.
+quiet_start = "21:00"
+quiet_end = "08:00"
+# The weekly grading check: every job that scored below min_fit that week.
+weekly_day = "sunday"
+weekly_time = "09:00"

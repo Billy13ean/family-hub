@@ -5,12 +5,15 @@ output is short plain text meant to be read by Claude.
 """
 
 import argparse
+import json
+import os
 import sys
 import time as systime
 from datetime import date, datetime, time, timedelta
 
 from . import finder
 from . import household as hh
+from . import job_texts
 from . import jobs
 from . import mailbox
 from . import messages
@@ -502,17 +505,79 @@ def cmd_jobs_find(args) -> None:
         print(f"No fit scores: {paths.job_profile} doesn't exist yet.")
 
 
+def _jobs_state() -> dict:
+    path = get_paths().jobs_state
+    try:
+        return json.loads(path.read_text()) if path.exists() else {}
+    except ValueError:
+        return {}  # only remembers when the weekly check went out; worst case it's sent again
+
+
+def _save_jobs_state(state: dict) -> None:
+    path = get_paths().jobs_state
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state))
+    os.replace(tmp, path)
+
+
+def _text_jobs(config: Config, text: str, dry_run: bool) -> None:
+    if dry_run:
+        print(f"Would text {config.jobs_to or '(nobody: set [jobs] to)'}:\n{text}")
+        return
+    if not config.jobs_to:
+        raise messages.MessagesError("Nobody to text job matches to. Set [jobs] to = \"+1...\" in config.toml.")
+    messages.send(text, [config.jobs_to])
+
+
+def cmd_jobs_notify(args) -> None:
+    """Text new matches, and the weekly check when it's due. Nothing during quiet hours."""
+    config = _config()
+    now = datetime.now(config.timezone)
+    if quiet := job_texts.quiet(now.time(), config.jobs_quiet_start, config.jobs_quiet_end):
+        print(f"Quiet hours until {config.jobs_quiet_end:%H:%M}: nothing sent.")
+    queue = _queue()
+    found = job_texts.matches(queue.items, config.jobs_min_fit)
+    if found and not quiet:
+        _text_jobs(config, job_texts.match_text(found), args.dry_run)
+        if not args.dry_run:
+            for item in found:
+                item.data["texted"] = now.isoformat(timespec="minutes")
+            queue.save()
+    elif not quiet:
+        print(f"No new jobs at {config.jobs_min_fit}+ to text.")
+    state = _jobs_state()
+    if not quiet and job_texts.weekly_due(now, config.jobs_weekly_day, config.jobs_weekly_time, state.get("weekly_sent", "")):
+        _text_jobs(config, job_texts.weekly_text(queue.items, config.jobs_min_fit, now.date()), args.dry_run)
+        if not args.dry_run:
+            _save_jobs_state({**state, "weekly_sent": now.date().isoformat()})
+    if found and not quiet and not args.dry_run:
+        print(f"Texted {len(found)} job match{'es' if len(found) != 1 else ''} to {config.jobs_to}.")
+
+
+def cmd_jobs_report(args) -> None:
+    """The weekly grading check, now. Prints it unless --send."""
+    config = _config()
+    text = job_texts.weekly_text(_queue().items, config.jobs_min_fit, _today(config))
+    if args.send:
+        _text_jobs(config, text, dry_run=False)
+        print(f"Sent the weekly check to {config.jobs_to}.")
+    else:
+        print(text)
+
+
 def cmd_jobs_loop(args) -> None:
-    """Fetch new alerts and look them up every hour. start-hub.command runs this in the background."""
+    """Fetch, look up and text new jobs every hour. start-hub.command runs this in the background."""
     while True:
         config = _config()
-        for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find)):
+        for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find), ("notify", cmd_jobs_notify)):
             print(f"{datetime.now(config.timezone):%Y-%m-%d %H:%M} jobs {name}", flush=True)
             try:
-                step(argparse.Namespace(numbers=[]))
+                step(argparse.Namespace(numbers=[], dry_run=False))
             except Exception as e:  # keep the loop alive; the next hour may work
                 print(f"jobs {name} failed: {e}", flush=True)
-                break  # nothing new to look up if the fetch failed
+                if name == "fetch":
+                    continue  # still look up and text what's already queued
             sys.stdout.flush()
         # Short sleeps, checked against the clock, survive the Mac sleeping in between.
         target = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
@@ -532,6 +597,11 @@ def cmd_pending_list(args) -> None:
 def _decide(args, status: str) -> None:
     queue = _queue()
     done = [queue.decide(n, status) for n in args.numbers]
+    today = _today(_config()).isoformat()
+    for item in done:
+        item.data["decided"] = today
+        if args.why:
+            item.data["why"] = jobs.clean(args.why)  # for tuning the job scores
     queue.save()
     for item in done:
         print(f"{status.capitalize()}: #{item.number} {item.title}")
@@ -672,6 +742,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("loop", help="fetch, then find, every hour (start-hub.command runs it)")
     p.add_argument("--minutes", type=int, default=60, help="minutes between runs (default 60)")
     p.set_defaults(func=cmd_jobs_loop)
+    p = job_cmds.add_parser("notify", help="text new matches and, when due, the weekly check ([jobs] in config.toml)")
+    p.add_argument("--dry-run", action="store_true", help="print the texts instead of sending them")
+    p.set_defaults(func=cmd_jobs_notify)
+    p = job_cmds.add_parser("report", help="the weekly grading check: jobs that scored below min_fit this week")
+    p.add_argument("--send", action="store_true", help="text it instead of printing it")
+    p.set_defaults(func=cmd_jobs_report)
 
     queue = commands.add_parser("pending", help="proposals waiting for a yes or no").add_subparsers(required=True, metavar="action")
     p = queue.add_parser("list")
@@ -680,6 +756,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func in (("accept", cmd_pending_accept), ("reject", cmd_pending_reject)):
         p = queue.add_parser(name)
         p.add_argument("numbers", nargs="+", type=int)
+        p.add_argument("--why", help="the reason, kept for tuning (\"too junior\")")
         p.set_defaults(func=func)
 
     return parser

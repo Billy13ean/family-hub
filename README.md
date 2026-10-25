@@ -185,7 +185,10 @@ Job alerts and the queue of proposals waiting for a yes or no:
 hm jobs scan alert.eml [more.eml]     # queue the jobs in LinkedIn alert emails (must pass LinkedIn's DKIM check)
 hm jobs fetch                         # queue the unread LinkedIn alerts in the hub's Gmail (IMAP)
 hm jobs find [3 4]                    # look up waiting jobs on the company's own site and score the fit
-hm jobs loop                          # fetch, then find, every hour (start-hub.command runs it)
+hm jobs notify [--dry-run]            # text new matches at min_fit+ to [jobs] to; the weekly check when due
+hm jobs report [--send]               # the weekly grading check: this week's jobs that scored below min_fit
+hm jobs loop                          # fetch, find, notify, every hour (start-hub.command runs it)
+hm pending reject 6 --why "too junior"   # a reason on accept or reject, kept for tuning the scores
 hm pending list [--kind job]
 hm pending accept 3 | pending reject 2 4
 ```
@@ -202,6 +205,18 @@ from that sender, and passes it to the same parser as `jobs scan`. Emails are
 marked read only after the queue is saved, and ones that fail LinkedIn's
 signature check are marked read and reported, not queued. No AI reads the
 mailbox. The hub's own session isn't allowed to run `fetch`, `find` or `loop`.
+
+`jobs notify` texts jobs that scored at least `min_fit` (7) to one person,
+`[jobs] to` in `config.toml`, never the group chat, and holds them during
+quiet hours (21:00 to 08:00) for one morning text. Each Sunday at 09:00 it
+also sends the weekly grading check: every job that scored below `min_fit`
+that week, best first with its reason, to catch ones the scorer undersold.
+The hub's Claude session can read its chat history, so these texts carry only
+short checked fields (the alert's title line, the checked link, pay, remote and
+the score's one-line reason), never the description from the web page. Nick
+replies "tailor 14" or "pass 14 too junior", and the hub runs
+`hm pending accept` or `reject --why`; it can't run `hm jobs` or list the
+queue.
 
 `jobs find` runs `claude -p` twice per job (about 30 seconds), each in an empty
 folder with no settings, MCP servers or saved session:
