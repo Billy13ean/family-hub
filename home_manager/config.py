@@ -121,6 +121,11 @@ def load_config(paths: Paths) -> Config:
     day = str(job.get("weekly_day", "sunday")).lower()
     if day not in DAYS:
         raise ConfigError(f"[jobs] weekly_day must be a day like \"sunday\", not {day!r}.")
+    jobs_to = job.get("to", "")
+    if isinstance(jobs_to, list) and len(jobs_to) <= 1:
+        jobs_to = jobs_to[0] if jobs_to else ""  # written like [digest] to
+    if not isinstance(jobs_to, str):
+        raise ConfigError('[jobs] to is one phone number or email, like to = "+15551234567": job texts go to one person only.')
     min_fit = job.get("min_fit", 7)
     if not isinstance(min_fit, int) or not 1 <= min_fit <= 10:
         raise ConfigError(f"[jobs] min_fit must be a whole number from 1 to 10, not {min_fit!r}.")
@@ -133,7 +138,7 @@ def load_config(paths: Paths) -> Config:
         bill_days=int(bills.get("remind_days", 3)),
         digest_to=tuple(digest.get("to", [])),
         digest_time=_clock(digest.get("time", "07:00"), "[digest] time"),
-        jobs_to=str(job.get("to", "")).strip(),
+        jobs_to=jobs_to.strip(),
         jobs_min_fit=min_fit,
         jobs_quiet_start=_clock(job.get("quiet_start", "21:00"), "[jobs] quiet_start"),
         jobs_quiet_end=_clock(job.get("quiet_end", "08:00"), "[jobs] quiet_end"),

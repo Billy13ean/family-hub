@@ -147,3 +147,11 @@ def test_notify_needs_someone_to_text(run):
     (run.dir / "config.toml").write_text("[jobs]\nmin_fit = 7\n")
     with pytest.raises(SystemExit, match=r"Set \[jobs\] to"):
         run("jobs", "notify")
+
+
+def test_jobs_to_is_one_person(run):
+    (run.dir / "config.toml").write_text('[jobs]\nto = ["+15550000001"]\n')
+    assert "Would text +15550000001:" in run("jobs", "notify", "--dry-run")
+    (run.dir / "config.toml").write_text('[jobs]\nto = ["+15550000001", "+15550000002"]\n')
+    with pytest.raises(SystemExit, match="one person only"):
+        run("jobs", "notify", "--dry-run")
