@@ -37,6 +37,10 @@ class Paths:
         return self.dir / "job-profile.md"
 
     @property
+    def career_facts(self) -> Path:
+        return self.dir / "career-facts.md"
+
+    @property
     def gmail(self) -> Path:
         return self.dir / "gmail.toml"
 
@@ -70,6 +74,8 @@ class Config:
     # The weekly grading check: every job that scored below jobs_min_fit.
     jobs_weekly_day: int = 6  # Monday is 0
     jobs_weekly_time: time = time(9, 0)
+    # Where tailored resumes and cover letters are emailed: the same person's own address.
+    jobs_email: str = ""
 
     def label(self, calendar_name: str) -> str:
         return self.labels.get(calendar_name, calendar_name)
@@ -126,6 +132,9 @@ def load_config(paths: Paths) -> Config:
         jobs_to = jobs_to[0] if jobs_to else ""  # written like [digest] to
     if not isinstance(jobs_to, str):
         raise ConfigError('[jobs] to is one phone number or email, like to = "+15551234567": job texts go to one person only.')
+    jobs_email = job.get("email", "")
+    if not isinstance(jobs_email, str) or (jobs_email.strip() and "@" not in jobs_email):
+        raise ConfigError('[jobs] email is one email address, like email = "you@example.com".')
     min_fit = job.get("min_fit", 7)
     if not isinstance(min_fit, int) or not 1 <= min_fit <= 10:
         raise ConfigError(f"[jobs] min_fit must be a whole number from 1 to 10, not {min_fit!r}.")
@@ -144,4 +153,5 @@ def load_config(paths: Paths) -> Config:
         jobs_quiet_end=_clock(job.get("quiet_end", "08:00"), "[jobs] quiet_end"),
         jobs_weekly_day=DAYS.index(day),
         jobs_weekly_time=_clock(job.get("weekly_time", "09:00"), "[jobs] weekly_time"),
+        jobs_email=jobs_email.strip(),
     )

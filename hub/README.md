@@ -23,7 +23,8 @@ iPhones ──iMessage──▶ Family Hub's Apple Account, signed in on a Mac o
                       Terminal: start-hub.command
                         ├─ Claude Code + iMessage plugin   (may only run ./hm)
                         ├─ ./hm digest-loop                (7:00 digest)
-                        └─ ./hm jobs loop                  (hourly: hub's Gmail → job queue)
+                        └─ ./hm jobs loop                  (hourly: hub's Gmail → job queue;
+                                                            tailored drafts → Nick's email)
                             │  EventKit
                             ▼
                       iCloud: Household calendar  ◀── shared with you both
@@ -177,14 +178,17 @@ cp CLAUDE.local.example.md CLAUDE.local.md
 open -e CLAUDE.local.md                        # names, numbers, kids, usual places
 ```
 
-Optional, for job alerts: the hub's Gmail login and the job profile. Both
-stay in `~/.config/home-manager/`, which the hub's Claude session can't read.
+Optional, for job alerts: the hub's Gmail login, the job profile and, for
+tailored resumes, career-facts. They stay in `~/.config/home-manager/`, which
+the hub's Claude session can't read.
 
 ```sh
 cp ~/family-hub/gmail.example.toml ~/.config/home-manager/gmail.toml
 chmod 600 ~/.config/home-manager/gmail.toml
 nano ~/.config/home-manager/gmail.toml         # hub's Gmail address and app password
-# copy job-profile.md from the Mac where you wrote it into ~/.config/home-manager/
+# copy job-profile.md and career-facts.md from the Mac where you wrote them
+# into ~/.config/home-manager/, then chmod 600 both
+# in config.toml under [jobs]: email = "you@gmail.com"  (where tailored drafts go)
 ./hm jobs fetch                                # should log in and report what it found
 ```
 

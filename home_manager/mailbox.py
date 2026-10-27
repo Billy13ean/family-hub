@@ -1,14 +1,18 @@
-"""The hub's own Gmail inbox, read over IMAP: new LinkedIn job alerts only.
+"""The hub's own Gmail account: LinkedIn job alerts in over IMAP, tailored drafts out over SMTP.
 
 Nick's Gmail forwards LinkedIn alerts here with a filter, so this inbox only
 ever holds what that filter sends. The login is the hub account's address and
 a Google app password, kept in ~/.config/home-manager/gmail.toml (outside the
 repo, readable only by its owner). No AI reads this mailbox: this module hands
 the raw emails to `jobs.parse_alert`, which checks LinkedIn's signature.
+
+The only mail it sends is tailored drafts, to the one address in `[jobs] email`.
 """
 
 import imaplib
+import smtplib
 import stat
+from email.message import EmailMessage
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +20,8 @@ from pathlib import Path
 from .jobs import SENDER
 
 HOST = "imap.gmail.com"
+SMTP_HOST = "smtp.gmail.com"
+DOCX = "vnd.openxmlformats-officedocument.wordprocessingml.document"
 TIMEOUT = 60  # seconds
 MAX_EMAILS = 50  # per fetch; anything more waits for the next one
 
@@ -107,6 +113,24 @@ class Inbox:
         if status != "OK":
             raise MailboxError(f"Gmail wouldn't {doing}: {_text(data)}")
         return data
+
+
+def send(login: Login, to: str, subject: str, body: str, attachments: dict[str, bytes], connect=None) -> None:
+    """Email `to` from the hub's account, with .docx attachments ({file name: contents})."""
+    message = EmailMessage()
+    message["From"], message["To"], message["Subject"] = login.address, to, subject
+    message.set_content(body)
+    for name, data in attachments.items():
+        message.add_attachment(data, maintype="application", subtype=DOCX, filename=name)
+    connect = connect or (lambda: smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=TIMEOUT))
+    try:
+        with connect() as smtp:
+            smtp.login(login.address, login.app_password)
+            smtp.send_message(message)
+    except smtplib.SMTPAuthenticationError as e:
+        raise MailboxError(f"Gmail refused the login for {login.address}: {_text(e.smtp_error)}") from None
+    except (smtplib.SMTPException, OSError) as e:
+        raise MailboxError(f"Sending email through {SMTP_HOST} failed: {_text(str(e))}") from None
 
 
 def _text(value) -> str:

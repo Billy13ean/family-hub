@@ -1,6 +1,7 @@
 # Copy to ~/.config/home-manager/gmail.toml, fill in, then: chmod 600 ~/.config/home-manager/gmail.toml
-# The login `hm jobs fetch` uses to read LinkedIn alerts over IMAP. This is the
-# hub's own Gmail account (the one your filter forwards alerts to), not yours.
+# The login `hm jobs fetch` uses to read LinkedIn alerts over IMAP, and
+# `hm jobs tailor` uses to email drafts to [jobs] email. This is the hub's own
+# Gmail account (the one your filter forwards alerts to), not yours.
 
 address = "hub@example.com"
 # A Google app password for that account (myaccount.google.com/apppasswords),

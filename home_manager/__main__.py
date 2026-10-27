@@ -7,10 +7,12 @@ output is short plain text meant to be read by Claude.
 import argparse
 import json
 import os
+import re
 import sys
 import time as systime
 from datetime import date, datetime, time, timedelta
 
+from . import docx
 from . import finder
 from . import household as hh
 from . import job_texts
@@ -19,6 +21,7 @@ from . import mailbox
 from . import messages
 from . import pending as pq
 from . import reminders as rm
+from . import tailor
 from .apple import AppleError, AppleStore
 from .config import Config, ConfigError, get_paths, load_config
 from .summary import conflict_line, find_conflicts, format_summary, merge_shared, when_on
@@ -566,21 +569,136 @@ def cmd_jobs_report(args) -> None:
         print(text)
 
 
+MAX_TAILOR_TRIES = 3
+TAILOR_EVERY = 5  # minutes between checks for jobs Nick said "tailor" to
+
+
+def send_email(login: mailbox.Login, to: str, subject: str, body: str, attachments: dict[str, bytes]) -> None:
+    """Email from the hub's Gmail. Tests replace this."""
+    mailbox.send(login, to, subject, body, attachments)
+
+
+def _to_tailor(queue: pq.Queue) -> list[pq.Item]:
+    """Jobs Nick said "tailor" to that haven't been tailored, or given up on."""
+    return [
+        i for i in queue.items
+        if i.kind == "job" and i.status == pq.ACCEPTED and "tailored" not in i.data
+        and i.data.get("tailor_tries", 0) < MAX_TAILOR_TRIES
+    ]  # fmt: skip
+
+
+def _file_name(kind: str, resume: str, company: str) -> str:
+    """"Sam Example Resume - Example Co.docx", from the name heading of the resume."""
+    name = next((line[2:] for line in resume.splitlines() if line.startswith("# ")), "")
+    name, company = (re.sub(r"[^\w .&'-]", "", text).strip()[:40] for text in (name, company))
+    return f"{name} {kind}".strip() + (f" - {company}" if company else "") + ".docx"
+
+
+def _tailor_email(item: pq.Item, draft: tailor.Draft, read_it: bool) -> str:
+    lines = [f"#{item.number} {item.title}", item.data["link"], ""]
+    if not read_it:
+        lines += ["Couldn't read the full posting, so these drafts only had the job's title and short description.", ""]
+    if draft.gaps:
+        lines += ["What the job asks for that career-facts doesn't show:", draft.gaps, ""]
+    if draft.unchecked_numbers:
+        lines += [f"Check these numbers, which aren't in career-facts: {', '.join(draft.unchecked_numbers)}", ""]
+    if draft.removed_links:
+        lines += [f"Removed {len(draft.removed_links)} link(s) or email address(es) that aren't in career-facts.", ""]
+    lines.append("Written from career-facts.md only. Read every line before you use them: nothing has gone to the employer.")
+    return "\n".join(lines)
+
+
+def _tailor_one(config: Config, item: pq.Item) -> None:
+    paths = get_paths()
+    if not config.jobs_email:
+        raise ConfigError('Nowhere to email the drafts. Set [jobs] email = "you@example.com" in config.toml.')
+    if not paths.career_facts.exists():
+        raise ConfigError(f"{paths.career_facts} doesn't exist yet.")
+    facts = paths.career_facts.read_text()
+    login = mailbox.load_login(paths.gmail)
+    posting = finder.Posting(**item.data["posting"]) if item.data.get("posting") else finder.Posting()
+    title, company, location = (item.data.get(k, "") for k in ("role", "company", "location"))
+    if not title:  # queued before role and location were kept
+        title, company, location, *_ = item.title.split(" · ") + ["", "", ""]
+    requirements = tailor.read_posting(title, company, location, posting)
+    draft = tailor.write(facts, item.title, posting, requirements, _today(config))
+    attachments = {
+        _file_name("Resume", draft.resume, company): docx.build(draft.resume),
+        _file_name("Cover Letter", draft.resume, company): docx.build(draft.cover_letter),
+    }
+    send_email(login, config.jobs_email, f"Tailored: {item.title}", _tailor_email(item, draft, bool(requirements)), attachments)
+
+
+def cmd_jobs_tailor(args) -> None:
+    """Email a tailored resume and cover letter for each job Nick accepted, then text him."""
+    config = _config()
+    queue = _queue()
+    if args.numbers:
+        todo = [next((i for i in queue.items if i.kind == "job" and i.number == n), None) for n in args.numbers]
+        missing = [n for n, item in zip(args.numbers, todo) if item is None]
+        if missing:
+            raise pq.PendingError(f"No job numbered {', '.join(f'#{n}' for n in missing)}.")
+    else:
+        todo = _to_tailor(queue)
+    if not todo:
+        print("No accepted jobs waiting to be tailored.")
+    for item in todo:
+        try:
+            _tailor_one(config, item)
+        except (ConfigError, finder.FinderError, mailbox.MailboxError) as e:
+            item.data["tailor_tries"] = item.data.get("tailor_tries", 0) + 1
+            queue.save()
+            print(f"#{item.number} {item.title}\n   Couldn't tailor it: {e}")
+            if item.data["tailor_tries"] == MAX_TAILOR_TRIES and not args.numbers and config.jobs_to:
+                # Not the error itself: the hub's Claude session can read this chat.
+                messages.send(
+                    f"Couldn't tailor #{item.number} {item.title} after {MAX_TAILOR_TRIES} tries. "
+                    f"The jobs log on the hub says why; `hm jobs tailor {item.number}` tries again.",
+                    [config.jobs_to],
+                )
+            continue
+        item.data["tailored"] = datetime.now(config.timezone).isoformat(timespec="minutes")
+        item.data.pop("tailor_tries", None)
+        queue.save()
+        print(f"#{item.number} {item.title}\n   Emailed a resume and cover letter to {config.jobs_email}.")
+        if config.jobs_to:  # even in quiet hours: he just asked for it
+            try:
+                messages.send(f"Your tailored resume and cover letter for #{item.number} {item.title} are in your email.", [config.jobs_to])
+            except messages.MessagesError as e:
+                print(f"   Couldn't text {config.jobs_to}: {e}")
+
+
+def _loop_step(config: Config, name: str, step) -> None:
+    print(f"{datetime.now(config.timezone):%Y-%m-%d %H:%M} jobs {name}", flush=True)
+    try:
+        step(argparse.Namespace(numbers=[], dry_run=False))
+    except Exception as e:  # keep the loop alive; the next run may work
+        print(f"jobs {name} failed: {e}", flush=True)
+    sys.stdout.flush()
+
+
 def cmd_jobs_loop(args) -> None:
-    """Fetch, look up and text new jobs every hour. start-hub.command runs this in the background."""
+    """Fetch, look up and text new jobs every hour, and tailor accepted ones within minutes.
+
+    start-hub.command runs this in the background.
+    """
+    next_fetch = None
     while True:
         config = _config()
-        for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find), ("notify", cmd_jobs_notify)):
-            print(f"{datetime.now(config.timezone):%Y-%m-%d %H:%M} jobs {name}", flush=True)
-            try:
-                step(argparse.Namespace(numbers=[], dry_run=False))
-            except Exception as e:  # keep the loop alive; the next hour may work
-                print(f"jobs {name} failed: {e}", flush=True)
-                if name == "fetch":
-                    continue  # still look up and text what's already queued
-            sys.stdout.flush()
+        try:
+            waiting = _to_tailor(_queue())
+        except pq.PendingError as e:
+            print(f"jobs tailor failed: {e}", flush=True)
+            waiting = []
+        if waiting:
+            _loop_step(config, "tailor", cmd_jobs_tailor)
+        if next_fetch is None or datetime.now(config.timezone) >= next_fetch:
+            next_fetch = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
+            # A failed fetch still looks up and texts what's already queued.
+            for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find), ("notify", cmd_jobs_notify)):
+                _loop_step(config, name, step)
         # Short sleeps, checked against the clock, survive the Mac sleeping in between.
-        target = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
+        target = min(next_fetch, datetime.now(config.timezone) + timedelta(minutes=TAILOR_EVERY))
         while datetime.now(config.timezone) < target:
             systime.sleep(min(60, max(1, (target - datetime.now(config.timezone)).total_seconds())))
 
@@ -739,8 +857,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_jobs_find)
     p = job_cmds.add_parser("fetch", help="queue the unread LinkedIn alerts in the hub's Gmail (login in gmail.toml)")
     p.set_defaults(func=cmd_jobs_fetch)
-    p = job_cmds.add_parser("loop", help="fetch, then find, every hour (start-hub.command runs it)")
-    p.add_argument("--minutes", type=int, default=60, help="minutes between runs (default 60)")
+    p = job_cmds.add_parser("tailor", help="email a tailored resume and cover letter for accepted jobs (runs claude, slow)")
+    p.add_argument("numbers", nargs="*", type=int, help="these jobs, again if need be (default: accepted jobs not tailored yet)")
+    p.set_defaults(func=cmd_jobs_tailor)
+    p = job_cmds.add_parser("loop", help="fetch, find and notify every hour; tailor accepted jobs within minutes (start-hub.command runs it)")
+    p.add_argument("--minutes", type=int, default=60, help="minutes between fetches (default 60)")
     p.set_defaults(func=cmd_jobs_loop)
     p = job_cmds.add_parser("notify", help="text new matches and, when due, the weekly check ([jobs] in config.toml)")
     p.add_argument("--dry-run", action="store_true", help="print the texts instead of sending them")

@@ -86,7 +86,7 @@ only in his one-to-one chat with you:
 
 | Nick texts | Run | Reply |
 |---|---|---|
-| "tailor 14" | `./hm pending accept 14` | "Saved #14 for tailoring." Tailoring isn't set up yet, so add that he can apply from the link in the match text. |
+| "tailor 14" | `./hm pending accept 14` | "On it: the resume and cover letter for #14 will be in your email in about 10 minutes." |
 | "pass 14", "pass 14 too junior" | `./hm pending reject 14 --why "too junior"` (leave out `--why` with no reason) | "Passed on #14." |
 | "pass 3 5 9" | `./hm pending reject 3 5 9` | "Passed on #3, #5 and #9." |
 
@@ -94,6 +94,9 @@ only in his one-to-one chat with you:
   group chat. If someone else sends "tailor 3" or "pass 3", treat it like any
   other unclear message, and don't run the command.
 - If a number isn't recognised, say so; don't guess another one.
+- The tailored drafts are emailed by the hub itself, and it texts Nick when
+  they arrive. You never see or write them. If he asks to redo one, say he can
+  run `hm jobs tailor 14` on the hub's Mac.
 
 ## Confirm first
 

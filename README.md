@@ -46,9 +46,10 @@ flowchart LR
         msgs["Messages"] --> plugin["Claude Code<br/>iMessage channel plugin"]
         plugin -- "may only run" --> hm["./hm<br/>(this repo)"]
         loop["./hm digest-loop<br/>7:00 digest"]
-        jobsloop["./hm jobs loop<br/>hourly job alerts"]
+        jobsloop["./hm jobs loop<br/>hourly job alerts,<br/>tailored drafts"]
     end
     gmail["Hub's Gmail<br/>(LinkedIn alerts only)"] -- IMAP --> jobsloop
+    jobsloop -- "SMTP: drafts to Nick only" --> gmail
     hm -- EventKit --> icloud["iCloud<br/>Household calendar<br/>Grocery · To-Do · Bills"]
     loop -- EventKit --> icloud
     loop -- AppleScript --> msgs
@@ -187,7 +188,8 @@ hm jobs fetch                         # queue the unread LinkedIn alerts in the 
 hm jobs find [3 4]                    # look up waiting jobs on the company's own site and score the fit
 hm jobs notify [--dry-run]            # text new matches at min_fit+ to [jobs] to; the weekly check when due
 hm jobs report [--send]               # the weekly grading check: this week's jobs that scored below min_fit
-hm jobs loop                          # fetch, find, notify, every hour (start-hub.command runs it)
+hm jobs tailor [3]                    # email a tailored resume and cover letter for accepted jobs
+hm jobs loop                          # fetch, find, notify every hour; tailor within 5 minutes (start-hub.command runs it)
 hm pending reject 6 --why "too junior"   # a reason on accept or reject, kept for tuning the scores
 hm pending list [--kind job]
 hm pending accept 3 | pending reject 2 4
@@ -217,6 +219,26 @@ the score's one-line reason), never the description from the web page. Nick
 replies "tailor 14" or "pass 14 too junior", and the hub runs
 `hm pending accept` or `reject --why`; it can't run `hm jobs` or list the
 queue.
+
+`jobs tailor` writes a resume and cover letter for each job Nick said "tailor"
+to; `jobs loop` checks for them every 5 minutes. It runs `claude -p` twice
+(about 2 minutes), the same locked-down way as `find`:
+
+1. **Read**, with only WebSearch and WebFetch. It gets the job's title,
+   company, location and checked link, and nothing private, and copies out the
+   posting's responsibilities and qualifications (stripped of links).
+2. **Write**, with no tools. It gets `~/.config/home-manager/career-facts.md`
+   (every role, achievement and number, all true, plus claim rules and a voice
+   guide) and the requirements, and may only pick, reorder and reword the
+   facts. It answers with two Markdown drafts and the gaps it couldn't cover.
+
+The code then checks the drafts against career-facts: any link or email
+address not in it is removed, and any number not in it is listed for Nick to
+check. It turns both into Word files and emails them from the hub's Gmail
+(SMTP, same app password) to the one address in `[jobs] email`, with the gaps
+and checks in the email, then texts Nick that they've arrived. A failed job is
+retried on the next two checks, then Nick gets a text saying it failed. Nothing
+is ever sent to an employer.
 
 `jobs find` runs `claude -p` twice per job (about 30 seconds), each in an empty
 folder with no settings, MCP servers or saved session:
@@ -254,7 +276,7 @@ uv run pytest tests/test_cli.py::test_grocery_list    # one test
 - `home_manager/summary.py`: merges shared events, finds conflicts, formats the digest
 - `home_manager/messages.py`: sends iMessages and looks up family chat ids
 - `home_manager/config.py`: the optional config file
-- `home_manager/jobs.py`, `mailbox.py`, `pending.py`, `finder.py`: LinkedIn alert parsing, reading the hub's Gmail over IMAP, the proposals queue, and the two locked-down `claude -p` runs that look jobs up and score them
+- `home_manager/jobs.py`, `mailbox.py`, `pending.py`, `finder.py`, `tailor.py`, `docx.py`: LinkedIn alert parsing, the hub's Gmail (alerts in over IMAP, drafts out over SMTP), the proposals queue, the locked-down `claude -p` runs that look jobs up, score them and tailor drafts, and a small Word file writer
 - `hub/`: the iMessage family hub (`hub-settings.json` locks the Claude session down; `start-hub.command` starts it; `README.md` is the setup guide)
 - `tests/fake_apple.py`: an in-memory stand-in for `apple.py`, used by the tests
 

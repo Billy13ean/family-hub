@@ -21,7 +21,8 @@ export IMESSAGE_ACCESS_MODE=static
 # Morning digest, in the background. Its log is in ~/Library/Logs.
 ./hm digest-loop >> "$HOME/Library/Logs/family-hub-digest.log" 2>&1 &
 DIGEST_PID=$!
-# Job alerts: every hour, read new ones from the hub's Gmail and look them up.
+# Job alerts: every hour, read new ones from the hub's Gmail and look them up;
+# every 5 minutes, email tailored drafts for jobs Nick replied "tailor" to.
 # Needs ~/.config/home-manager/gmail.toml; without it the log says so each hour.
 ./hm jobs loop >> "$HOME/Library/Logs/family-hub-jobs.log" 2>&1 &
 JOBS_PID=$!

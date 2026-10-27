@@ -41,3 +41,6 @@ quiet_end = "08:00"
 # The weekly grading check: every job that scored below min_fit that week.
 weekly_day = "sunday"
 weekly_time = "09:00"
+# Where tailored resumes and cover letters are emailed (from the hub's Gmail),
+# after a "tailor 3" reply: the job hunter's own address. Needs career-facts.md.
+# email = "you@example.com"
