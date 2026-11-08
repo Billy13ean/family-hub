@@ -1,0 +1,5 @@
+#!/bin/sh
+# Forced command for the Stream Deck's SSH key (see "Stream Deck" in hub/README.md).
+# Runs only the few job commands home_manager/deck.py allows; it ignores anything else.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+cd "$(dirname "$0")/.." && exec uv run --quiet python -m home_manager.deck

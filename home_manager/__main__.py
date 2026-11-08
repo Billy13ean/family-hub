@@ -21,6 +21,7 @@ from . import mailbox
 from . import messages
 from . import pending as pq
 from . import reminders as rm
+from . import search
 from . import tailor
 from .apple import AppleError, AppleStore
 from .config import Config, ConfigError, get_paths, load_config
@@ -393,7 +394,12 @@ def cmd_list_due(args) -> None:
 
 
 def _queue() -> pq.Queue:
+    """A snapshot of the queue, for reading. Change it with _editing()."""
     return pq.Queue(get_paths().pending)
+
+
+def _editing():
+    return pq.editing(get_paths().pending)
 
 
 def _queue_jobs(queue: pq.Queue, found: list[jobs.Job], today: date) -> tuple[list[pq.Item], int]:
@@ -417,7 +423,6 @@ def _print_added(added: list[pq.Item], seen: int, source: str = "") -> None:
 
 def cmd_jobs_scan(args) -> None:
     config = _config()
-    queue = _queue()
     found = []
     for path in args.files:
         try:
@@ -425,8 +430,8 @@ def cmd_jobs_scan(args) -> None:
         except OSError as e:
             raise jobs.JobAlertError(f"Can't read {path}: {e.strerror}.") from None
         found += jobs.parse_alert(raw)
-    added, seen = _queue_jobs(queue, found, _today(config))
-    queue.save()
+    with _editing() as queue:
+        added, seen = _queue_jobs(queue, found, _today(config))
     _print_added(added, seen)
 
 
@@ -438,7 +443,6 @@ def inbox(login: mailbox.Login) -> mailbox.Inbox:
 def cmd_jobs_fetch(args) -> None:
     config = _config()
     login = mailbox.load_login(get_paths().gmail)
-    queue = _queue()
     with inbox(login) as box:
         emails = box.unread_alerts()
         found, skipped = [], []
@@ -447,8 +451,8 @@ def cmd_jobs_fetch(args) -> None:
                 found += jobs.parse_alert(raw)
             except jobs.JobAlertError as e:
                 skipped.append(str(e))  # marked read too, so it isn't retried every hour
-        added, seen = _queue_jobs(queue, found, _today(config))
-        queue.save()  # only then mark them read: a crash before this leaves them for next time
+        with _editing() as queue:  # saved before marking read: a crash first leaves them for next time
+            added, seen = _queue_jobs(queue, found, _today(config))
         box.mark_read([uid for uid, _ in emails])
     _print_added(added, seen, f" from {len(emails)} email{'s' if len(emails) != 1 else ''}")
     for reason in skipped:
@@ -496,13 +500,14 @@ def cmd_jobs_find(args) -> None:
         except finder.FinderError as e:
             print(f"#{item.number} {item.title}\n   Couldn't look it up: {e}")
             continue
-        item.data["posting"] = posting.as_dict()
-        item.data.pop("fit", None)
-        if fit:
-            item.data["fit"] = {"score": fit[0], "reason": fit[1]}
-        if posting.url:
-            item.data["link"] = posting.url
-        queue.save()  # each lookup takes a while; keep what's done
+        with _editing() as fresh:  # each lookup takes a while; keep what's done, and others' changes
+            item = fresh.get(item.number) or item
+            item.data["posting"] = posting.as_dict()
+            item.data.pop("fit", None)
+            if fit:
+                item.data["fit"] = {"score": fit[0], "reason": fit[1]}
+            if posting.url:
+                item.data["link"] = posting.url
         print(f"#{item.number} {item.title}\n   {item.data['link']}{_job_details(item)}")
     if todo and not profile:
         print(f"No fit scores: {paths.job_profile} doesn't exist yet.")
@@ -544,9 +549,10 @@ def cmd_jobs_notify(args) -> None:
     if found and not quiet:
         _text_jobs(config, job_texts.match_text(found), args.dry_run)
         if not args.dry_run:
-            for item in found:
-                item.data["texted"] = now.isoformat(timespec="minutes")
-            queue.save()
+            with _editing() as fresh:
+                for item in found:
+                    if fresh.get(item.number):
+                        fresh.get(item.number).data["texted"] = now.isoformat(timespec="minutes")
     elif not quiet:
         print(f"No new jobs at {config.jobs_min_fit}+ to text.")
     state = _jobs_state()
@@ -570,7 +576,6 @@ def cmd_jobs_report(args) -> None:
 
 
 MAX_TAILOR_TRIES = 3
-TAILOR_EVERY = 5  # minutes between checks for jobs Nick said "tailor" to
 
 
 def send_email(login: mailbox.Login, to: str, subject: str, body: str, attachments: dict[str, bytes]) -> None:
@@ -646,8 +651,10 @@ def cmd_jobs_tailor(args) -> None:
         try:
             _tailor_one(config, item)
         except (ConfigError, finder.FinderError, mailbox.MailboxError) as e:
-            item.data["tailor_tries"] = item.data.get("tailor_tries", 0) + 1
-            queue.save()
+            with _editing() as fresh:
+                tries = item.data["tailor_tries"] = item.data.get("tailor_tries", 0) + 1
+                if fresh.get(item.number):
+                    fresh.get(item.number).data["tailor_tries"] = tries
             print(f"#{item.number} {item.title}\n   Couldn't tailor it: {e}")
             if item.data["tailor_tries"] == MAX_TAILOR_TRIES and not args.numbers and config.jobs_to:
                 # Not the error itself: the hub's Claude session can read this chat.
@@ -657,15 +664,112 @@ def cmd_jobs_tailor(args) -> None:
                     [config.jobs_to],
                 )
             continue
-        item.data["tailored"] = datetime.now(config.timezone).isoformat(timespec="minutes")
-        item.data.pop("tailor_tries", None)
-        queue.save()
+        with _editing() as fresh:
+            if fresh.get(item.number):
+                fresh.get(item.number).data["tailored"] = datetime.now(config.timezone).isoformat(timespec="minutes")
+                fresh.get(item.number).data.pop("tailor_tries", None)
         print(f"#{item.number} {item.title}\n   Emailed a resume and cover letter to {config.jobs_email}.")
         if config.jobs_to:  # even in quiet hours: he just asked for it
             try:
                 messages.send(f"Your tailored resume and cover letter for #{item.number} {item.title} are in your email.", [config.jobs_to])
             except messages.MessagesError as e:
                 print(f"   Couldn't text {config.jobs_to}: {e}")
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _search_now(mode: str, only: str) -> None:
+    """Search, queue what's new, then look it up and score it like an alert's jobs."""
+    config = _config()
+    terms = search.load_terms(get_paths().search)
+    _save_jobs_state({**_jobs_state(), "search_running": datetime.now(config.timezone).isoformat(timespec="minutes")})
+    try:
+        companies = len(terms.companies) if only != "boards" else 0
+        boards = len(terms.boards) if only != "companies" else 0
+        print(f"Searching {companies} companies and {boards} job boards for {'any' if mode == 'any' else mode} roles. This takes a few minutes.", flush=True)
+        found, problems = search.search(terms, mode, only)
+        with _editing() as queue:
+            known = {(_norm(i.data.get("company", "")), _norm(i.data.get("role", ""))) for i in queue.items if i.kind == "job"}
+            added, seen = [], 0
+            for job in found:
+                pair = (_norm(job.company), _norm(job.title))
+                data = {"link": job.url, "role": job.title, "company": job.company, "location": job.location, "source": job.source}
+                line = " · ".join(part for part in (job.title, job.company, job.location) if part)
+                item = None if pair in known else queue.add("job", "web:" + "-".join(pair).replace(" ", "-")[:150], line, data, _today(config))
+                if item:
+                    added.append(item)
+                    known.add(pair)
+                else:
+                    seen += 1
+        _print_added(added, seen, " from the search")
+        for problem in problems:
+            print(f"A search run failed: {problem}")
+        if added:
+            cmd_jobs_find(argparse.Namespace(numbers=[i.number for i in added]))
+    finally:
+        state = _jobs_state()
+        state.pop("search_running", None)
+        _save_jobs_state({**state, "last_search": datetime.now(config.timezone).isoformat(timespec="minutes")})
+
+
+def cmd_jobs_search(args) -> None:
+    """Search the watchlist and job boards now, or (--later) ask the jobs loop to."""
+    if args.later:
+        config = _config()
+        when = datetime.now(config.timezone).isoformat(timespec="minutes")
+        _save_jobs_state({**_jobs_state(), "search_requested": {"mode": args.mode, "only": args.only, "at": when}})
+        print("Search requested: the jobs loop starts it within a minute.")
+        return
+    _search_now(args.mode, args.only)
+
+
+def _job_card(item: pq.Item) -> dict:
+    posting, fit = item.data.get("posting") or {}, item.data.get("fit") or {}
+    return {
+        "number": item.number,
+        "title": item.title,
+        "link": item.data.get("link", ""),
+        "remote": posting.get("remote", "unknown"),
+        "pay": posting.get("pay", ""),
+        "fit": fit.get("score"),
+        "reason": fit.get("reason", ""),
+        "closed": bool(posting.get("closed")),
+        "added": item.added,
+    }
+
+
+def cmd_jobs_list(args) -> None:
+    """Waiting jobs, best fit first, filtered by --min-fit and --mode. For the Stream Deck with --json."""
+    jobs_ = [_job_card(i) for i in _queue().waiting("job")]
+    if args.min_fit:
+        jobs_ = [j for j in jobs_ if (j["fit"] or 0) >= args.min_fit]
+    if args.mode != "any":
+        jobs_ = [j for j in jobs_ if j["remote"] in (args.mode, "unknown")]
+    jobs_.sort(key=lambda j: (-(j["fit"] or 0), -j["number"]))
+    if args.json:
+        state = _jobs_state()
+        searching = {
+            "requested": bool(state.get("search_requested")),
+            "running": state.get("search_running", ""),
+            "last": state.get("last_search", ""),
+        }
+        print(json.dumps({"jobs": jobs_, "search": searching}))
+        return
+    if not jobs_:
+        print("No waiting jobs match.")
+    for j in jobs_:
+        facts = " · ".join(f for f in (j["remote"].capitalize() if j["remote"] != "unknown" else "", j["pay"], f"fit {j['fit']}/10" if j["fit"] else "") if f)
+        print(f"#{j['number']} {j['title']}\n   {facts}\n   {j['link']}")
+
+
+def _work_waiting() -> bool:
+    """A job to tailor or a search to run: the loop's reason to wake up early."""
+    try:
+        return bool(_to_tailor(_queue())) or bool(_jobs_state().get("search_requested"))
+    except pq.PendingError:
+        return False
 
 
 def _loop_step(config: Config, name: str, step) -> None:
@@ -678,7 +782,7 @@ def _loop_step(config: Config, name: str, step) -> None:
 
 
 def cmd_jobs_loop(args) -> None:
-    """Fetch, look up and text new jobs every hour, and tailor accepted ones within minutes.
+    """Fetch, look up and text new jobs every hour; tailor and search on request within a minute.
 
     start-hub.command runs this in the background.
     """
@@ -692,14 +796,20 @@ def cmd_jobs_loop(args) -> None:
             waiting = []
         if waiting:
             _loop_step(config, "tailor", cmd_jobs_tailor)
+        state = _jobs_state()
+        if request := state.pop("search_requested", None):
+            _save_jobs_state(state)  # cleared first, so a failing search isn't retried every minute
+            mode = request.get("mode") if request.get("mode") in search.MODES else "any"
+            only = request.get("only") if request.get("only") in ("all", "companies", "boards") else "all"
+            _loop_step(config, "search", lambda args: _search_now(mode, only))
         if next_fetch is None or datetime.now(config.timezone) >= next_fetch:
             next_fetch = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
             # A failed fetch still looks up and texts what's already queued.
             for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find), ("notify", cmd_jobs_notify)):
                 _loop_step(config, name, step)
         # Short sleeps, checked against the clock, survive the Mac sleeping in between.
-        target = min(next_fetch, datetime.now(config.timezone) + timedelta(minutes=TAILOR_EVERY))
-        while datetime.now(config.timezone) < target:
+        target = next_fetch
+        while datetime.now(config.timezone) < target and not _work_waiting():
             systime.sleep(min(60, max(1, (target - datetime.now(config.timezone)).total_seconds())))
 
 
@@ -713,14 +823,13 @@ def cmd_pending_list(args) -> None:
 
 
 def _decide(args, status: str) -> None:
-    queue = _queue()
-    done = [queue.decide(n, status) for n in args.numbers]
     today = _today(_config()).isoformat()
-    for item in done:
-        item.data["decided"] = today
-        if args.why:
-            item.data["why"] = jobs.clean(args.why)  # for tuning the job scores
-    queue.save()
+    with _editing() as queue:
+        done = [queue.decide(n, status) for n in args.numbers]
+        for item in done:
+            item.data["decided"] = today
+            if args.why:
+                item.data["why"] = jobs.clean(args.why)  # for tuning the job scores
     for item in done:
         print(f"{status.capitalize()}: #{item.number} {item.title}")
 
@@ -860,7 +969,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("tailor", help="email a tailored resume and cover letter for accepted jobs (runs claude, slow)")
     p.add_argument("numbers", nargs="*", type=int, help="these jobs, again if need be (default: accepted jobs not tailored yet)")
     p.set_defaults(func=cmd_jobs_tailor)
-    p = job_cmds.add_parser("loop", help="fetch, find and notify every hour; tailor accepted jobs within minutes (start-hub.command runs it)")
+    p = job_cmds.add_parser("search", help="search the watchlist companies and job boards in search.toml (runs claude, slow)")
+    p.add_argument("--mode", choices=search.MODES, default="any", help="only remote, hybrid or on-site roles (default any)")
+    p.add_argument("--only", choices=("all", "companies", "boards"), default="all")
+    p.add_argument("--later", action="store_true", help="ask the jobs loop to run it (what the Stream Deck does)")
+    p.set_defaults(func=cmd_jobs_search)
+    p = job_cmds.add_parser("list", help="waiting jobs, best fit first")
+    p.add_argument("--min-fit", type=int, default=0, choices=range(0, 11), metavar="N", help="only jobs that scored N or more")
+    p.add_argument("--mode", choices=search.MODES, default="any", help="only remote, hybrid or on-site roles (unknown ones stay)")
+    p.add_argument("--json", action="store_true", help="for the Stream Deck")
+    p.set_defaults(func=cmd_jobs_list)
+    p = job_cmds.add_parser("loop", help="fetch, find and notify every hour; tailor and search on request (start-hub.command runs it)")
     p.add_argument("--minutes", type=int, default=60, help="minutes between fetches (default 60)")
     p.set_defaults(func=cmd_jobs_loop)
     p = job_cmds.add_parser("notify", help="text new matches and, when due, the weekly check ([jobs] in config.toml)")

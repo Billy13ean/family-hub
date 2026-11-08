@@ -41,6 +41,10 @@ class Paths:
         return self.dir / "career-facts.md"
 
     @property
+    def search(self) -> Path:
+        return self.dir / "search.toml"
+
+    @property
     def gmail(self) -> Path:
         return self.dir / "gmail.toml"
 

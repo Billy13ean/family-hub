@@ -186,8 +186,8 @@ the hub's Claude session can't read.
 cp ~/family-hub/gmail.example.toml ~/.config/home-manager/gmail.toml
 chmod 600 ~/.config/home-manager/gmail.toml
 nano ~/.config/home-manager/gmail.toml         # hub's Gmail address and app password
-# copy job-profile.md and career-facts.md from the Mac where you wrote them
-# into ~/.config/home-manager/, then chmod 600 both
+# copy job-profile.md, career-facts.md and search.toml from the Mac where you
+# wrote them into ~/.config/home-manager/, then chmod 600 them
 # in config.toml under [jobs]: email = "you@gmail.com"  (where tailored drafts go)
 ./hm jobs fetch                                # should log in and report what it found
 ```
@@ -199,6 +199,31 @@ macOS asks whether Terminal may control Messages: click **OK**.
 ./hm summary            # prints it
 ./hm summary --send     # texts it
 ```
+
+### Optional: the Stream Deck job page
+
+A Stream Deck on the host Mac can list waiting jobs, tailor or pass one, and
+ask for a search, over SSH. Its key may run only those commands
+(`home_manager/deck.py`): even if the Mac side went wrong, it can't do
+anything else on the hub.
+
+1. In the hub's Mac: System Settings → General → Sharing → turn on
+   **Remote Login**, allowed for the hub's user only. Note the address it shows.
+2. On the host Mac, make a key just for the Stream Deck:
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/stream-deck -N "" -C stream-deck
+   cat ~/.ssh/stream-deck.pub
+   ```
+3. In the hub's Mac, add one line to `~/.ssh/authorized_keys` (`chmod 600` it),
+   with the hub user's home folder and the key from step 2:
+   ```
+   command="/Users/HUB_USER/family-hub/hub/deck-command",restrict ssh-ed25519 AAAA... stream-deck
+   ```
+4. Test from the host Mac:
+   ```sh
+   ssh -i ~/.ssh/stream-deck HUB_USER@HUB_ADDRESS jobs list --json   # JSON, not an error
+   ssh -i ~/.ssh/stream-deck HUB_USER@HUB_ADDRESS summary --send    # refused
+   ```
 
 ### 8. Install the iMessage plugin and set the allowlist (inside the hub's Mac)
 

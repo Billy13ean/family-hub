@@ -189,8 +189,11 @@ def _site_name(host: str) -> str:
     return labels[-2].replace("-", "") if len(labels) >= 2 else ""
 
 
-def url_problem(url: str, company: str) -> str:
-    """Why this URL can't be trusted as the company's posting, or "" when it can."""
+def url_problem(url: str, company: str, boards: tuple[str, ...] = ()) -> str:
+    """Why this URL can't be trusted as the company's posting, or "" when it can.
+
+    `boards` are extra hosts allowed for this call: job boards a search was told to use.
+    """
     try:
         parts = urlsplit(url)
         port = parts.port
@@ -205,7 +208,7 @@ def url_problem(url: str, company: str) -> str:
         return "not a plain web address"
     if re.fullmatch(r"[\d.]+|\[.*\]", host) or "." not in host or host.startswith("xn--") or ".xn--" in host:
         return "not a plain web address"
-    if any(host == site or host.endswith("." + site) for site in JOB_SITES):
+    if any(host == site or host.endswith("." + site) for site in (*JOB_SITES, *boards)):
         return ""
     words = _words(company)
     name = _site_name(host)

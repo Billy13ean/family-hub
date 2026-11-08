@@ -1,0 +1,20 @@
+# Copy to ~/.config/home-manager/search.toml and fill in. Not secret, but it
+# shows where you're looking, so it stays out of the repo. `hm jobs search`
+# sends these terms (and nothing else private) to a web-only search.
+
+# Job titles to look for; close matches count too.
+titles = ["Trail Crew Lead", "Park Operations Manager"]
+
+# The kind of work, in a few words: watchlist searches list every open role
+# like this, since careers pages rarely use your exact titles.
+areas = "park operations, trail work and outdoor programs, manager level or above"
+
+# Places, as you'd type them into a job board.
+locations = ["Springfield, IL", "Remote (US)"]
+
+# Watchlist: companies whose own careers pages are searched.
+companies = ["Example Parks", "Demo Outdoors"]
+
+# Job boards to search: job-sites (Greenhouse, Lever, Ashby, Workday directly),
+# builtin (Built In NYC), wellfound, welcometothejungle.
+boards = ["job-sites", "builtin", "wellfound", "welcometothejungle"]

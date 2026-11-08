@@ -189,7 +189,9 @@ hm jobs find [3 4]                    # look up waiting jobs on the company's ow
 hm jobs notify [--dry-run]            # text new matches at min_fit+ to [jobs] to; the weekly check when due
 hm jobs report [--send]               # the weekly grading check: this week's jobs that scored below min_fit
 hm jobs tailor [3]                    # email a tailored resume and cover letter for accepted jobs
-hm jobs loop                          # fetch, find, notify every hour; tailor within 5 minutes (start-hub.command runs it)
+hm jobs search [--mode remote] [--only companies|boards] [--later]   # search the watchlist and job boards in search.toml
+hm jobs list [--min-fit 8] [--mode hybrid] [--json]                  # waiting jobs, best fit first (--json for the Stream Deck)
+hm jobs loop                          # fetch, find, notify every hour; tailor and search on request within a minute
 hm pending reject 6 --why "too junior"   # a reason on accept or reject, kept for tuning the scores
 hm pending list [--kind job]
 hm pending accept 3 | pending reject 2 4
@@ -240,6 +242,24 @@ and checks in the email, then texts Nick that they've arrived. A failed job is
 retried on the next two checks, then Nick gets a text saying it failed. Nothing
 is ever sent to an employer.
 
+`jobs search` goes looking instead of waiting for alerts. It reads
+`~/.config/home-manager/search.toml` (copy `search.example.toml`): job titles,
+places, a watchlist of companies and which job boards to use (job-application
+sites such as Greenhouse and Lever searched directly, Built In NYC, Wellfound,
+Welcome to the Jungle). Each search run, three at a time, is a `claude -p` with
+only WebSearch and WebFetch, given those terms and nothing else private. The
+code keeps a result only if it's complete, at a company on the watchlist (for
+watchlist runs), and its link is on the company's own site, a known
+job-application site, or the board that run searched. New jobs join the same
+queue as alerts (a job already queued from an alert isn't added twice), then
+`find` looks each up and scores it, so matches are texted and "tailor" works
+the same way. With `--later` the jobs loop runs the search within a minute;
+that's how the Stream Deck asks for one, since `claude` can't sign in from an
+SSH session.
+
+Every command that changes the queue reloads it under a lock first
+(`pending.editing`), so a reply that arrives during a slow lookup isn't lost.
+
 `jobs find` runs `claude -p` twice per job (about 30 seconds), each in an empty
 folder with no settings, MCP servers or saved session:
 
@@ -276,6 +296,7 @@ uv run pytest tests/test_cli.py::test_grocery_list    # one test
 - `home_manager/summary.py`: merges shared events, finds conflicts, formats the digest
 - `home_manager/messages.py`: sends iMessages and looks up family chat ids
 - `home_manager/config.py`: the optional config file
+- `home_manager/search.py`, `deck.py`: on-demand job search, and the only commands the Stream Deck's SSH key may run
 - `home_manager/jobs.py`, `mailbox.py`, `pending.py`, `finder.py`, `tailor.py`, `docx.py`: LinkedIn alert parsing, the hub's Gmail (alerts in over IMAP, drafts out over SMTP), the proposals queue, the locked-down `claude -p` runs that look jobs up, score them and tailor drafts, and a small Word file writer
 - `hub/`: the iMessage family hub (`hub-settings.json` locks the Claude session down; `start-hub.command` starts it; `README.md` is the setup guide)
 - `tests/fake_apple.py`: an in-memory stand-in for `apple.py`, used by the tests

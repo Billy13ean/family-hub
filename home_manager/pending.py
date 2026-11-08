@@ -6,8 +6,10 @@ a short number to text back ("tailor 3"), and a key such as
 it's been turned down.
 """
 
+import fcntl
 import json
 import os
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
@@ -55,6 +57,9 @@ class Queue:
         self.items.append(item)
         return item
 
+    def get(self, number: int) -> Item | None:
+        return next((i for i in self.items if i.number == number), None)
+
     def waiting(self, kind: str | None = None) -> list[Item]:
         return [i for i in self.items if i.status == NEW and kind in (None, i.kind)]
 
@@ -66,3 +71,20 @@ class Queue:
             raise PendingError(f"#{number} was already {item.status}.")
         item.status = status
         return item
+
+
+@contextmanager
+def editing(path: Path):
+    """Load, change and save the queue while holding its lock.
+
+    The jobs loop, a texted reply and the Stream Deck can all change the queue,
+    and each saves the whole file, so every change reloads it under the lock
+    first. Keep the work inside short: never a claude run. Nothing is saved if
+    it raises.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        queue = Queue(path)
+        yield queue
+        queue.save()
