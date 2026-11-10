@@ -95,3 +95,31 @@ def test_scan_then_accept_and_reject(run):
 
     out = run("pending", "list", "--kind", "job")
     assert "#1" not in out and "#2" not in out and "#3 [job] Wildlife Survey Technician" in out
+
+
+def test_fix_titles_shifts_fields_back_and_rescores_waiting_ones(run, tmp_path):
+    queue = Queue(tmp_path / "pending.json")
+    scored = {"posting": {"remote": "remote"}, "fit": {"score": 4}, "texted": "2026-10-19T09:00"}
+    broken = {"role": "30+ new jobs match your preferences.", "company": "Trail Crew Lead", "location": "Example Parks"}
+    queue.add("job", "linkedin:1000000001", "30+ new jobs match your preferences. · Trail Crew Lead · Example Parks",
+              {**broken, **scored, "link": "https://careers.wrong.example/1"}, date(2026, 10, 19))  # fmt: skip
+    queue.add("job", "linkedin:1000000002", "7 new jobs match your preferences. · Pastry Chef · Demo Bakery · $55K",
+              {**broken, "company": "Pastry Chef", "location": "Demo Bakery", **scored}, date(2026, 10, 19))  # fmt: skip
+    queue.add("job", "linkedin:1000000003", "Wildlife Survey Technician · Example Parks",
+              {"role": "Wildlife Survey Technician", "company": "Example Parks", **scored}, date(2026, 10, 19))  # fmt: skip
+    queue.decide(2, ACCEPTED)
+    queue.save()
+
+    assert "Would fix 2 jobs" in run("jobs", "fix-titles", "--dry-run")
+    assert Queue(tmp_path / "pending.json").get(1).data["role"].startswith("30+")  # untouched
+
+    out = run("jobs", "fix-titles")
+    assert "#1 Trail Crew Lead · Example Parks" in out and "Fixed 2 jobs" in out
+    one, two, three = Queue(tmp_path / "pending.json").items
+    assert (one.data["role"], one.data["company"], one.data["location"]) == ("Trail Crew Lead", "Example Parks", "")
+    assert one.data["link"] == "https://www.linkedin.com/jobs/view/1000000001/"
+    assert not {"posting", "fit", "texted"} & one.data.keys()  # waiting: scored again
+    assert two.title == "Pastry Chef · Demo Bakery · $55K" and two.data["fit"] == {"score": 4}  # decided: kept
+    assert three.title == "Wildlife Survey Technician · Example Parks" and three.data["fit"] == {"score": 4}
+
+    assert "Fixed 0 jobs" in run("jobs", "fix-titles")

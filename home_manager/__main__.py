@@ -588,6 +588,38 @@ def cmd_jobs_notify(args) -> None:
         print(f"Texted {len(found)} job match{'es' if len(found) != 1 else ''} to {config.jobs_to}.")
 
 
+def _fix_titles(queue: pq.Queue) -> list[pq.Item]:
+    """Repair jobs queued before b6f3559, whose alert header ("22 new jobs match...") became the role.
+
+    Each field moved down a line: the real role was kept as the company and the
+    company as the location (the location itself was lost). Waiting ones lose
+    their look-up and score, so the loop scores them again with the right names.
+    """
+    broken = [i for i in queue.items if i.kind == "job" and jobs.HEADER.match(i.data.get("role", ""))]
+    for item in broken:
+        data = item.data
+        data["role"], data["company"], data["location"] = data.get("company", ""), data.get("location", ""), ""
+        item.title = " · ".join(item.title.split(" · ")[1:])
+        if item.key.startswith("linkedin:"):  # the look-up may have swapped in a wrong company's page
+            data["link"] = f"https://www.linkedin.com/jobs/view/{item.key.removeprefix('linkedin:')}/"
+        if item.status == pq.NEW:
+            for key in ("posting", "fit", "texted"):
+                data.pop(key, None)
+    return broken
+
+
+def cmd_jobs_fix_titles(args) -> None:
+    if args.dry_run:
+        fixed = _fix_titles(_queue())  # a snapshot: nothing is saved
+    else:
+        with _editing() as queue:
+            fixed = _fix_titles(queue)
+    for item in fixed:
+        print(f"#{item.number} {item.title}")
+    done = "Would fix" if args.dry_run else "Fixed"
+    print(f"{done} {len(fixed)} job{'s' if len(fixed) != 1 else ''}; waiting ones get scored again by the loop.")
+
+
 def cmd_jobs_report(args) -> None:
     """The weekly grading check, now. Prints it unless --send."""
     config = _config()
@@ -1015,6 +1047,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("notify", help="text new matches and, when due, the weekly check ([jobs] in config.toml)")
     p.add_argument("--dry-run", action="store_true", help="print the texts instead of sending them")
     p.set_defaults(func=cmd_jobs_notify)
+    p = job_cmds.add_parser("fix-titles", help="repair jobs whose alert header became the role (queued before b6f3559)")
+    p.add_argument("--dry-run", action="store_true", help="list them without changing anything")
+    p.set_defaults(func=cmd_jobs_fix_titles)
+
     p = job_cmds.add_parser("report", help="the weekly grading check: jobs that scored below min_fit this week")
     p.add_argument("--send", action="store_true", help="text it instead of printing it")
     p.set_defaults(func=cmd_jobs_report)

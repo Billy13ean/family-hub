@@ -22,7 +22,7 @@ _VIEW_JOB = re.compile(r"^View job: https://www\.linkedin\.com/comm/jobs/view/(\
 _ALERT_FOR = re.compile(r"^Your job alert for (.+)$")
 _JOBS_IN = re.compile(r"^(.+) jobs in (.+)$")
 _SKIP = ("New jobs match", "New jobs from your other alerts", "Manage alerts:", "See all jobs", "Edit alert", "---")
-_HEADER = re.compile(r"^\d+\+? new jobs? match", re.IGNORECASE)  # "22 new jobs match your preferences."
+HEADER = re.compile(r"^\d+\+? new jobs? match", re.IGNORECASE)  # "22 new jobs match your preferences."
 _PAY = re.compile(r"\$\d")
 
 
@@ -84,7 +84,7 @@ def parse_alert_text(text: str) -> list[Job]:
     alert, card = "", []
     for raw_line in text.splitlines():
         line = clean(raw_line)
-        if not line or line.startswith(_SKIP) or _HEADER.match(line):
+        if not line or line.startswith(_SKIP) or HEADER.match(line):
             continue
         view = _VIEW_JOB.match(raw_line.strip())
         if view:
