@@ -477,7 +477,8 @@ def _job_details(item: pq.Item) -> str:
     return "".join(f"\n   {line}" for line in lines if line)
 
 
-def cmd_jobs_find(args) -> None:
+def cmd_jobs_find(args) -> bool:
+    """Look up and score waiting jobs. True when it stopped early to make way for a tailor or search."""
     queue = _queue()
     paths = get_paths()
     profile = paths.job_profile.read_text() if paths.job_profile.exists() else ""
@@ -490,7 +491,10 @@ def cmd_jobs_find(args) -> None:
         todo = [i for i in queue.waiting("job") if "posting" not in i.data]
     if not todo:
         print("No jobs left to look up.")
-    for item in todo:
+    for done, item in enumerate(todo):
+        if getattr(args, "make_way", False) and _work_waiting():  # a backlog can take hours
+            print(f"Stopped for a tailor or search; {len(todo) - done} left to look up after it.")
+            return True
         title, company, location = (item.data.get(k, "") for k in ("role", "company", "location"))
         if not title:  # queued before role and location were kept
             title, company, location, *_ = item.title.split(" · ") + ["", "", ""]
@@ -511,6 +515,7 @@ def cmd_jobs_find(args) -> None:
         print(f"#{item.number} {item.title}\n   {item.data['link']}{_job_details(item)}")
     if todo and not profile:
         print(f"No fit scores: {paths.job_profile} doesn't exist yet.")
+    return False
 
 
 def _jobs_state() -> dict:
@@ -772,13 +777,16 @@ def _work_waiting() -> bool:
         return False
 
 
-def _loop_step(config: Config, name: str, step) -> None:
+def _loop_step(config: Config, name: str, step):
+    """Run one step and return what it returned; None if it failed."""
     print(f"{datetime.now(config.timezone):%Y-%m-%d %H:%M} jobs {name}", flush=True)
     try:
-        step(argparse.Namespace(numbers=[], dry_run=False))
+        return step(argparse.Namespace(numbers=[], dry_run=False, make_way=True))
     except Exception as e:  # keep the loop alive; the next run may work
         print(f"jobs {name} failed: {e}", flush=True)
-    sys.stdout.flush()
+        return None
+    finally:
+        sys.stdout.flush()
 
 
 def cmd_jobs_loop(args) -> None:
@@ -805,8 +813,11 @@ def cmd_jobs_loop(args) -> None:
         if next_fetch is None or datetime.now(config.timezone) >= next_fetch:
             next_fetch = datetime.now(config.timezone) + timedelta(minutes=args.minutes)
             # A failed fetch still looks up and texts what's already queued.
+            stopped = False
             for name, step in (("fetch", cmd_jobs_fetch), ("find", cmd_jobs_find), ("notify", cmd_jobs_notify)):
-                _loop_step(config, name, step)
+                stopped = _loop_step(config, name, step) is True or stopped
+            if stopped:  # find made way for a tailor or search; back to the rest straight after
+                next_fetch = datetime.now(config.timezone)
         # Short sleeps, checked against the clock, survive the Mac sleeping in between.
         target = next_fetch
         while datetime.now(config.timezone) < target and not _work_waiting():

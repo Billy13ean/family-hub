@@ -1,3 +1,4 @@
+import argparse
 import json
 import sys
 from datetime import date
@@ -152,3 +153,45 @@ def test_find_without_a_profile_skips_scoring(run):
     assert all(tools for _, tools in run.fake.runs)
     with pytest.raises(SystemExit, match="No waiting job numbered #9"):
         run("jobs", "find", "9")
+
+
+def test_the_loop_stops_a_backlog_for_a_tailor(run, monkeypatch, capsys):
+    run("jobs", "scan", str(ALERT))
+    (run.dir / "job-profile.md").write_text("Pay floor: $45K.")
+    looked_up = []
+
+    def find(title, company, location):
+        looked_up.append(title)
+        if len(looked_up) == 2:
+            run("pending", "accept", "1")  # "tailor 1" arrives during a long catch-up
+        return finder.Posting(remote="remote")
+
+    monkeypatch.setattr(finder, "find", find)
+    assert cli.cmd_jobs_find(argparse.Namespace(numbers=[], make_way=True)) is True
+    assert len(looked_up) == 2
+    assert "2 left to look up after it" in capsys.readouterr().out
+
+    # By hand (no make_way) it never stops early.
+    assert cli.cmd_jobs_find(argparse.Namespace(numbers=[])) is False
+    assert len(looked_up) == 4
+
+
+def test_the_loop_goes_back_to_an_unfinished_backlog_straight_away(run, monkeypatch):
+    steps = []
+    finds = iter([True, False])  # the first find makes way for a tailor
+    monkeypatch.setattr(cli, "cmd_jobs_fetch", lambda args: steps.append("fetch"))
+    monkeypatch.setattr(cli, "cmd_jobs_find", lambda args: steps.append("find") or next(finds))
+    monkeypatch.setattr(cli, "cmd_jobs_notify", lambda args: steps.append("notify"))
+    monkeypatch.setattr(cli, "_work_waiting", lambda: False)
+
+    class Stop(Exception):
+        pass
+
+    def sleep(seconds):
+        raise Stop
+
+    monkeypatch.setattr(cli.systime, "sleep", sleep)
+    monkeypatch.setattr(sys, "argv", ["hm", "jobs", "loop"])
+    with pytest.raises(Stop):
+        cli.main()
+    assert steps == ["fetch", "find", "notify"] * 2  # no hour's wait in between
