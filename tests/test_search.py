@@ -149,6 +149,26 @@ def test_later_asks_the_loop_which_runs_it_within_a_minute(run, monkeypatch):
     assert "search_requested" not in json.loads((run.dir / "jobs-state.json").read_text())
 
 
+def test_the_loop_clears_a_search_a_restart_cut_short(run, monkeypatch, capsys):
+    (run.dir / "jobs-state.json").write_text(json.dumps({"search_running": "2026-10-19T20:45", "weekly_sent": "x"}))
+    for name in ("fetch", "find", "notify"):
+        monkeypatch.setattr(cli, f"cmd_jobs_{name}", lambda args: None)
+
+    class Stop(Exception):
+        pass
+
+    def sleep(seconds):
+        raise Stop
+
+    monkeypatch.setattr(cli.systime, "sleep", sleep)
+    monkeypatch.setattr(sys, "argv", ["hm", "jobs", "loop"])
+    with pytest.raises(Stop):
+        cli.main()
+    assert "Cleared a search that a restart cut short" in capsys.readouterr().out
+    assert json.loads((run.dir / "jobs-state.json").read_text()) == {"weekly_sent": "x"}
+    assert json.loads(run("jobs", "list", "--json"))["search"]["running"] == ""
+
+
 def test_a_reply_during_a_slow_lookup_is_kept(run, monkeypatch):
     def slow_find(title, company, location):
         run("pending", "accept", "1")  # Nick says "tailor 1" while this lookup runs

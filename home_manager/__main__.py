@@ -589,13 +589,13 @@ def cmd_jobs_notify(args) -> None:
 
 
 def _fix_titles(queue: pq.Queue) -> list[pq.Item]:
-    """Repair jobs queued before b6f3559, whose alert header ("22 new jobs match...") became the role.
+    """Repair jobs whose alert header ("22 new jobs match...") or saved search ("a" OR "b") became the role.
 
     Each field moved down a line: the real role was kept as the company and the
     company as the location (the location itself was lost). Waiting ones lose
     their look-up and score, so the loop scores them again with the right names.
     """
-    broken = [i for i in queue.items if i.kind == "job" and jobs.HEADER.match(i.data.get("role", ""))]
+    broken = [i for i in queue.items if i.kind == "job" and jobs.not_a_title(i.data.get("role", ""))]
     for item in broken:
         data = item.data
         data["role"], data["company"], data["location"] = data.get("company", ""), data.get("location", ""), ""
@@ -846,6 +846,10 @@ def cmd_jobs_loop(args) -> None:
     start-hub.command runs this in the background.
     """
     next_fetch = None
+    state = _jobs_state()
+    if state.pop("search_running", None):  # this loop runs every search, so one left "running" died in a restart
+        _save_jobs_state(state)
+        print("Cleared a search that a restart cut short; press Search again.", flush=True)
     while True:
         config = _config()
         try:
@@ -1047,7 +1051,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = job_cmds.add_parser("notify", help="text new matches and, when due, the weekly check ([jobs] in config.toml)")
     p.add_argument("--dry-run", action="store_true", help="print the texts instead of sending them")
     p.set_defaults(func=cmd_jobs_notify)
-    p = job_cmds.add_parser("fix-titles", help="repair jobs whose alert header became the role (queued before b6f3559)")
+    p = job_cmds.add_parser("fix-titles", help="repair jobs whose alert header or saved search became the role")
     p.add_argument("--dry-run", action="store_true", help="list them without changing anything")
     p.set_defaults(func=cmd_jobs_fix_titles)
 

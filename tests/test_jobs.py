@@ -35,6 +35,21 @@ View job: https://www.linkedin.com/comm/jobs/view/1000000001/?otpToken=x
     assert job.line() == "Trail Crew Lead · Example Parks · United States"
 
 
+def test_a_saved_search_line_starts_an_alert_not_a_job():
+    text = """“trail crew” OR “park ranger” or “wildlife survey”
+
+Trail Crew Lead
+Example Parks
+United States
+View job: https://www.linkedin.com/comm/jobs/view/1000000001/?otpToken=x
+"""
+    [job] = jobs.parse_alert_text(text)
+    assert job.line() == "Trail Crew Lead · Example Parks · United States"
+    assert job.alert.startswith("“trail crew” OR")
+    assert not jobs.not_a_title("Research and Development Lead")
+    assert not jobs.not_a_title('Director, "Brand" Studio')
+
+
 def test_links_drop_the_sign_in_token():
     for job in jobs.parse_alert(ALERT.read_bytes()):
         assert job.link == f"https://www.linkedin.com/jobs/view/{job.job_id}/"
@@ -105,17 +120,20 @@ def test_fix_titles_shifts_fields_back_and_rescores_waiting_ones(run, tmp_path):
               {**broken, **scored, "link": "https://careers.wrong.example/1"}, date(2026, 10, 19))  # fmt: skip
     queue.add("job", "linkedin:1000000002", "7 new jobs match your preferences. · Pastry Chef · Demo Bakery · $55K",
               {**broken, "company": "Pastry Chef", "location": "Demo Bakery", **scored}, date(2026, 10, 19))  # fmt: skip
+    queue.add("job", "linkedin:1000000004", "“trail crew” OR “park ranger” · Trail Crew Lead · Example Parks",
+              {**broken, "role": "“trail crew” OR “park ranger”"}, date(2026, 10, 19))  # fmt: skip
     queue.add("job", "linkedin:1000000003", "Wildlife Survey Technician · Example Parks",
               {"role": "Wildlife Survey Technician", "company": "Example Parks", **scored}, date(2026, 10, 19))  # fmt: skip
     queue.decide(2, ACCEPTED)
     queue.save()
 
-    assert "Would fix 2 jobs" in run("jobs", "fix-titles", "--dry-run")
+    assert "Would fix 3 jobs" in run("jobs", "fix-titles", "--dry-run")
     assert Queue(tmp_path / "pending.json").get(1).data["role"].startswith("30+")  # untouched
 
     out = run("jobs", "fix-titles")
-    assert "#1 Trail Crew Lead · Example Parks" in out and "Fixed 2 jobs" in out
-    one, two, three = Queue(tmp_path / "pending.json").items
+    assert "#1 Trail Crew Lead · Example Parks" in out and "Fixed 3 jobs" in out
+    one, two, query, three = Queue(tmp_path / "pending.json").items
+    assert query.title == "Trail Crew Lead · Example Parks" and query.data["role"] == "Trail Crew Lead"
     assert (one.data["role"], one.data["company"], one.data["location"]) == ("Trail Crew Lead", "Example Parks", "")
     assert one.data["link"] == "https://www.linkedin.com/jobs/view/1000000001/"
     assert not {"posting", "fit", "texted"} & one.data.keys()  # waiting: scored again

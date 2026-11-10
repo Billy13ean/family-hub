@@ -188,7 +188,7 @@ hm jobs fetch                         # queue the unread LinkedIn alerts in the 
 hm jobs find [3 4]                    # look up waiting jobs on the company's own site and score the fit
 hm jobs notify [--dry-run]            # text new matches at min_fit+ to [jobs] to; the weekly check when due
 hm jobs report [--send]               # the weekly grading check: this week's jobs that scored below min_fit
-hm jobs fix-titles [--dry-run]        # one-off: repair jobs whose alert header became the role (queued before b6f3559)
+hm jobs fix-titles [--dry-run]        # one-off: repair jobs whose alert header or saved search became the role
 hm jobs tailor [3]                    # email a tailored resume and cover letter for accepted jobs
 hm jobs search [--mode remote] [--only companies|boards] [--later]   # search the watchlist and job boards in search.toml
 hm jobs list [--min-fit 8] [--mode hybrid] [--json]                  # waiting jobs, best fit first (--json for the Stream Deck)

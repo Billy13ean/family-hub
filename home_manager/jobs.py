@@ -23,6 +23,7 @@ _ALERT_FOR = re.compile(r"^Your job alert for (.+)$")
 _JOBS_IN = re.compile(r"^(.+) jobs in (.+)$")
 _SKIP = ("New jobs match", "New jobs from your other alerts", "Manage alerts:", "See all jobs", "Edit alert", "---")
 HEADER = re.compile(r"^\d+\+? new jobs? match", re.IGNORECASE)  # "22 new jobs match your preferences."
+QUERY = re.compile(r"[\"“”][^\"“”]+[\"“”]\s+(OR|AND)\s+[\"“”]", re.IGNORECASE)  # a saved search: "a" OR "b"
 _PAY = re.compile(r"\$\d")
 
 
@@ -78,6 +79,11 @@ def parse_alert(raw: bytes) -> list[Job]:
     return parse_alert_text(body.get_content())
 
 
+def not_a_title(line: str) -> bool:
+    """An alert's header or saved-search line, which older parsing took for a job title."""
+    return bool(HEADER.match(line) or QUERY.search(line))
+
+
 def parse_alert_text(text: str) -> list[Job]:
     """Jobs in the order the email lists them, each once."""
     jobs: dict[str, Job] = {}
@@ -94,7 +100,7 @@ def parse_alert_text(text: str) -> list[Job]:
                 jobs[job_id] = Job(job_id, card[0], card[1], card[2], pay, alert)
             card = []
             continue
-        if _ALERT_FOR.match(line) or _JOBS_IN.match(line):  # a new saved search starts
+        if _ALERT_FOR.match(line) or _JOBS_IN.match(line) or QUERY.search(line):  # a new saved search starts
             alert, card = line.removeprefix("Your job alert for "), []
             continue
         card.append(line)
