@@ -215,6 +215,8 @@ mailbox. The hub's own session isn't allowed to run `fetch`, `find` or `loop`.
 quiet hours (21:00 to 08:00) for one morning text. Each Sunday at 09:00 it
 also sends the weekly grading check: every job that scored below `min_fit`
 that week, best first with its reason, to catch ones the scorer undersold.
+If three look-ups in a row fail, it texts once to say so: usually `claude`
+has signed out on the hub, which nothing else would show for days.
 The hub's Claude session can read its chat history, so these texts carry only
 short checked fields (the alert's title line, the checked link, pay, remote and
 the score's one-line reason), never the description from the web page. Nick

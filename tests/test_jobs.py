@@ -23,6 +23,18 @@ def test_parse_alert_reads_every_card_once():
     assert bakery.alert == "pastry chef jobs in Chicago"
 
 
+def test_a_numbered_header_is_not_a_job_title():
+    text = """22 new jobs match your preferences.
+
+Trail Crew Lead
+Example Parks
+United States
+View job: https://www.linkedin.com/comm/jobs/view/1000000001/?otpToken=x
+"""
+    [job] = jobs.parse_alert_text(text)
+    assert job.line() == "Trail Crew Lead · Example Parks · United States"
+
+
 def test_links_drop_the_sign_in_token():
     for job in jobs.parse_alert(ALERT.read_bytes()):
         assert job.link == f"https://www.linkedin.com/jobs/view/{job.job_id}/"

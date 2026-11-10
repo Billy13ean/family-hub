@@ -132,6 +132,32 @@ def test_weekly_check_goes_out_once_on_sunday(run):
     assert sum(t.startswith("Weekly") for t, _ in run.sent) == 1
 
 
+def test_failing_look_ups_are_texted_once_until_they_work_again(run):
+    run("jobs", "notify")  # the two matches
+    for _ in range(2):
+        cli._count_lookup(ok=False)
+    run("jobs", "notify")
+    assert len(run.sent) == 1  # two failures could be a fluke
+
+    cli._count_lookup(ok=False)
+    run.clock["now"] = datetime(2026, 10, 24, 23, 0)
+    run("jobs", "notify")
+    assert len(run.sent) == 1  # not during quiet hours
+
+    run.clock["now"] = datetime(2026, 10, 25, 8, 5)
+    run("jobs", "notify")
+    run("jobs", "notify")
+    failing = [t for t, _ in run.sent if t.startswith("Job look-ups have failed 3 times")]
+    assert len(failing) == 1 and "sign in" in failing[0]
+
+    cli._count_lookup(ok=True)  # signed back in
+    assert "failure_texted" not in json.loads((run.dir / "jobs-state.json").read_text())
+    for _ in range(3):
+        cli._count_lookup(ok=False)
+    run("jobs", "notify")
+    assert sum(t.startswith("Job look-ups") for t, _ in run.sent) == 2  # broke again: texted again
+
+
 def test_report_previews_and_decisions_keep_a_reason(run):
     assert run("jobs", "report").startswith("Weekly job grading check: 3 jobs scored")
     assert run.sent == []

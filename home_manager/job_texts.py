@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta
 from .pending import NEW, Item
 
 MAX_WEEKLY = 15  # jobs listed in the weekly check; the rest are counted
+FAILS_BEFORE_TEXT = 3  # look-ups failing in a row before Nick hears about it
 
 
 def quiet(now: time, start: time, end: time) -> bool:
@@ -53,6 +54,15 @@ def match_text(items: list[Item]) -> str:
     first = items[0].number
     lines += ["", f'Reply "tailor {first}" or "pass {first}" (a reason after pass helps tune the scores).']
     return "\n".join(lines)
+
+
+def failing_text(failures: int) -> str:
+    """Look-ups keep failing: most likely claude signed out on the hub, which nothing else would show for days."""
+    return (
+        f"Job look-ups have failed {failures} times in a row, so new jobs aren't being scored. "
+        "claude may be signed out on the hub: open Terminal on the hub's own screen (not over SSH), "
+        "run claude and sign in. The waiting jobs get scored on their own once it works."
+    )
 
 
 def weekly_due(now: datetime, day: int, at: time, last_sent: str) -> bool:

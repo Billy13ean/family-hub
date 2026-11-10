@@ -503,7 +503,9 @@ def cmd_jobs_find(args) -> bool:
             fit = finder.score(profile, item.title, posting) if profile else None
         except finder.FinderError as e:
             print(f"#{item.number} {item.title}\n   Couldn't look it up: {e}")
+            _count_lookup(ok=False)
             continue
+        _count_lookup(ok=True)
         with _editing() as fresh:  # each lookup takes a while; keep what's done, and others' changes
             item = fresh.get(item.number) or item
             item.data["posting"] = posting.as_dict()
@@ -534,6 +536,17 @@ def _save_jobs_state(state: dict) -> None:
     os.replace(tmp, path)
 
 
+def _count_lookup(ok: bool) -> None:
+    """Count look-ups failing in a row, so notify can text when claude has signed out."""
+    state = _jobs_state()
+    failures = 0 if ok else state.get("lookup_failures", 0) + 1
+    if failures != state.get("lookup_failures", 0):
+        state["lookup_failures"] = failures
+        if not failures:
+            state.pop("failure_texted", None)  # working again: text the next time it breaks
+        _save_jobs_state(state)
+
+
 def _text_jobs(config: Config, text: str, dry_run: bool) -> None:
     if dry_run:
         print(f"Would text {config.jobs_to or '(nobody: set [jobs] to)'}:\n{text}")
@@ -561,6 +574,12 @@ def cmd_jobs_notify(args) -> None:
     elif not quiet:
         print(f"No new jobs at {config.jobs_min_fit}+ to text.")
     state = _jobs_state()
+    failures = state.get("lookup_failures", 0)
+    if not quiet and failures >= job_texts.FAILS_BEFORE_TEXT and "failure_texted" not in state:
+        _text_jobs(config, job_texts.failing_text(failures), args.dry_run)
+        if not args.dry_run:
+            state = {**state, "failure_texted": now.isoformat(timespec="minutes")}
+            _save_jobs_state(state)
     if not quiet and job_texts.weekly_due(now, config.jobs_weekly_day, config.jobs_weekly_time, state.get("weekly_sent", "")):
         _text_jobs(config, job_texts.weekly_text(queue.items, config.jobs_min_fit, now.date()), args.dry_run)
         if not args.dry_run:
